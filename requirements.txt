@@ -1,0 +1,8 @@
+numpy
+pandas
+requests
+pymupdf
+python-docx
+sentence-transformers
+qdrant-client
+torch

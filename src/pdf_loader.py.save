@@ -1,0 +1,82 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "3c188140-35d4-46c4-ba0d-9708b87e4b27",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import pymupdf\n",
+    "from pathlib import Path\n",
+    "\n",
+    "\n",
+    "def load_pdf(file_path: str):\n",
+    "    \"\"\"\n",
+    "    读取 PDF，返回页面列表。\n",
+    "    每个页面包含：\n",
+    "    - page: 页码\n",
+    "    - text: 页面文本\n",
+    "    \"\"\"\n",
+    "\n",
+    "    pdf_path = Path(file_path)\n",
+    "\n",
+    "    if not pdf_path.exists():\n",
+    "        raise FileNotFoundError(f\"文件不存在: {pdf_path}\")\n",
+    "\n",
+    "    doc = pymupdf.open(pdf_path)\n",
+    "\n",
+    "    pages = []\n",
+    "\n",
+    "    for page_number, page in enumerate(doc):\n",
+    "        text = page.get_text(\"text\").strip()\n",
+    "\n",
+    "        if text:\n",
+    "            pages.append({\n",
+    "                \"page\": page_number + 1,\n",
+    "                \"text\": text\n",
+    "            })\n",
+    "\n",
+    "    doc.close()\n",
+    "\n",
+    "    return pages\n",
+    "\n",
+    "\n",
+    "if __name__ == \"__main__\":\n",
+    "\n",
+    "    pdf_file = \"data/raw/RAG学习资料.pdf\"\n",
+    "\n",
+    "    pages = load_pdf(pdf_file)\n",
+    "\n",
+    "    print(f\"PDF: {pdf_file}\")\n",
+    "    print(f\"有效页面: {len(pages)}\")\n",
+    "\n",
+    "    for page in pages[:3]:\n",
+    "        print(\"\\n\" + \"=\" * 60)\n",
+    "        print(f\"第 {page['page']} 页\")\n",
+    "        print(page[\"text\"][:500])"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.11.15"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

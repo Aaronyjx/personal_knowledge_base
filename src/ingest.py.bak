@@ -1,0 +1,549 @@
+import sys
+from pathlib import Path
+
+from .document_loader import (
+    load_document,
+    is_supported_document,
+)
+
+from .article_parser import (
+    extract_articles,
+)
+
+from .embedding import (
+    load_embedding_model,
+    embed_texts,
+)
+
+from .vector_store import (
+    get_qdrant_client,
+    create_collection,
+    calculate_file_hash,
+    is_file_ingested,
+    count_file_articles,
+    insert_articles,
+)
+
+
+# ============================================================
+# 项目路径
+# ============================================================
+
+PROJECT_ROOT = Path(
+    __file__
+).resolve().parent.parent
+
+DEFAULT_DATA_DIR = (
+    PROJECT_ROOT
+    / "data"
+    / "raw"
+)
+
+
+# ============================================================
+# 获取法律名称
+# ============================================================
+
+def get_law_name(file_path):
+    """
+    使用文件名作为法律名称。
+
+    例如：
+
+    中华人民共和国劳动法.pdf
+
+    -> 中华人民共和国劳动法
+    """
+
+    return Path(
+        file_path
+    ).stem.strip()
+
+
+# ============================================================
+# 查找文档
+# ============================================================
+
+def find_documents(path=None):
+    """
+    查找 PDF / DOCX 文件。
+
+    path=None：
+        扫描 data/raw/
+
+    path=文件：
+        返回该文件
+
+    path=目录：
+        扫描该目录
+    """
+
+    if path is None:
+        path = DEFAULT_DATA_DIR
+
+    path = Path(path)
+
+    # --------------------------------------------------------
+    # 文件
+    # --------------------------------------------------------
+
+    if path.is_file():
+
+        if not is_supported_document(path):
+
+            raise ValueError(
+                f"不支持的文件类型: "
+                f"{path.suffix}"
+            )
+
+        return [path]
+
+    # --------------------------------------------------------
+    # 目录
+    # --------------------------------------------------------
+
+    if path.is_dir():
+
+        documents = []
+
+        for file_path in sorted(
+            path.iterdir()
+        ):
+
+            if (
+                file_path.is_file()
+                and is_supported_document(
+                    file_path
+                )
+            ):
+
+                documents.append(
+                    file_path
+                )
+
+        return documents
+
+    raise FileNotFoundError(
+        f"路径不存在: {path}"
+    )
+
+
+# ============================================================
+# 导入单个文件
+# ============================================================
+
+def ingest_file(
+    client,
+    model,
+    file_path,
+):
+    """
+    导入单个法律文件。
+
+    返回：
+
+        ingested
+        skipped
+        empty
+    """
+
+    file_path = Path(
+        file_path
+    )
+
+    print()
+    print("=" * 60)
+    print(
+        f"处理文件: {file_path.name}"
+    )
+    print("=" * 60)
+
+    # --------------------------------------------------------
+    # 法律名称
+    # --------------------------------------------------------
+
+    law_name = get_law_name(
+        file_path
+    )
+
+    print(
+        f"法律名称: {law_name}"
+    )
+
+    # --------------------------------------------------------
+    # SHA256
+    # --------------------------------------------------------
+
+    print()
+    print(
+        "计算文件 SHA256..."
+    )
+
+    file_hash = calculate_file_hash(
+        file_path
+    )
+
+    print(
+        f"文件 Hash: "
+        f"{file_hash[:16]}..."
+    )
+
+    # --------------------------------------------------------
+    # 重复检查
+    # --------------------------------------------------------
+
+    print()
+    print(
+        "检查文件是否已经入库..."
+    )
+
+    if is_file_ingested(
+        client,
+        file_hash,
+    ):
+
+        count = count_file_articles(
+            client,
+            file_hash,
+        )
+
+        print()
+        print(
+            "⏭ 文件已经入库，自动跳过"
+        )
+
+        print(
+            f"已存在条款: {count}"
+        )
+
+        return "skipped"
+
+    # --------------------------------------------------------
+    # 读取文档
+    # --------------------------------------------------------
+
+    print()
+    print(
+        "读取法律文件..."
+    )
+
+    pages = load_document(
+        file_path
+    )
+
+    print(
+        f"文本块数量: {len(pages)}"
+    )
+
+    # --------------------------------------------------------
+    # 解析法律条款
+    # --------------------------------------------------------
+
+    print()
+    print(
+        "解析法律条款..."
+    )
+
+    articles = extract_articles(
+        pages
+    )
+
+    print(
+        f"法律条款数量: "
+        f"{len(articles)}"
+    )
+
+    if not articles:
+
+        print(
+            "⚠ 没有识别到法律条款"
+        )
+
+        return "empty"
+
+    # --------------------------------------------------------
+    # Embedding
+    # --------------------------------------------------------
+
+    texts = [
+        f"{law_name} {article['article']} {article['article_text']}"
+        for article in articles
+    ]
+
+    print()
+    print(
+        "生成 BGE-M3 Embedding..."
+    )
+
+    embeddings = embed_texts(
+        model,
+        texts,
+    )
+
+    print(
+        f"Embedding Shape: "
+        f"{embeddings.shape}"
+    )
+
+    # --------------------------------------------------------
+    # 写入 Qdrant
+    # --------------------------------------------------------
+
+    print()
+    print(
+        "写入 Qdrant..."
+    )
+
+    count = insert_articles(
+        client=client,
+        articles=articles,
+        embeddings=embeddings,
+        law_name=law_name,
+        source_file=file_path,
+        file_hash=file_hash,
+    )
+
+    print()
+    print(
+        f"✅ 文件入库完成: "
+        f"{count} 条"
+    )
+
+    return "ingested"
+
+
+# ============================================================
+# 批量入库
+# ============================================================
+
+def ingest_documents(
+    documents
+):
+
+    print("=" * 60)
+    print(
+        "法律知识库 V2 - 增量入库"
+    )
+    print("=" * 60)
+
+    print()
+    print(
+        f"待处理文件: "
+        f"{len(documents)}"
+    )
+
+    # --------------------------------------------------------
+    # Qdrant
+    # --------------------------------------------------------
+
+    client = get_qdrant_client()
+
+    create_collection(
+        client
+    )
+
+    # --------------------------------------------------------
+    # BGE-M3
+    # --------------------------------------------------------
+
+    print()
+    print(
+        "加载 BGE-M3..."
+    )
+
+    model = load_embedding_model()
+
+    # --------------------------------------------------------
+    # 统计
+    # --------------------------------------------------------
+
+    stats = {
+        "ingested": 0,
+        "skipped": 0,
+        "empty": 0,
+    }
+
+    # --------------------------------------------------------
+    # 逐个文件处理
+    # --------------------------------------------------------
+
+    for file_path in documents:
+
+        try:
+
+            result = ingest_file(
+                client,
+                model,
+                file_path,
+            )
+
+            if result in stats:
+                stats[result] += 1
+
+        except Exception as e:
+
+            print()
+            print(
+                f"❌ 文件处理失败: "
+                f"{file_path.name}"
+            )
+
+            print(
+                f"错误类型: "
+                f"{type(e).__name__}"
+            )
+
+            print(
+                f"错误信息: {e}"
+            )
+
+    # --------------------------------------------------------
+    # 最终统计
+    # --------------------------------------------------------
+
+    info = client.get_collection(
+        "labor_dispute_legal_knowledge"
+    )
+
+    print()
+    print("=" * 60)
+    print(
+        "批量入库完成"
+    )
+    print("=" * 60)
+
+    print()
+    print(
+        f"成功新增: "
+        f"{stats['ingested']}"
+    )
+
+    print(
+        f"重复跳过: "
+        f"{stats['skipped']}"
+    )
+
+    print(
+        f"无条款文件: "
+        f"{stats['empty']}"
+    )
+
+    print()
+    print(
+        f"知识库当前向量数: "
+        f"{info.points_count}"
+    )
+
+    print()
+    print("=" * 60)
+
+
+# ============================================================
+# 主入口
+# ============================================================
+
+def main():
+
+    # --------------------------------------------------------
+    # 没有参数
+    # --------------------------------------------------------
+
+    if len(sys.argv) == 1:
+
+        documents = find_documents()
+
+    # --------------------------------------------------------
+    # 指定文件 / 目录
+    # --------------------------------------------------------
+
+    else:
+
+        documents = []
+
+        for argument in sys.argv[1:]:
+
+            path = Path(
+                argument
+            )
+
+            found = find_documents(
+                path
+            )
+
+            documents.extend(
+                found
+            )
+
+    # --------------------------------------------------------
+    # 路径去重
+    # --------------------------------------------------------
+
+    unique_documents = []
+
+    seen = set()
+
+    for file_path in documents:
+
+        resolved = (
+            file_path.resolve()
+        )
+
+        if resolved not in seen:
+
+            seen.add(resolved)
+
+            unique_documents.append(
+                file_path
+            )
+
+    documents = unique_documents
+
+    # --------------------------------------------------------
+    # 没找到文件
+    # --------------------------------------------------------
+
+    if not documents:
+
+        print(
+            "⚠ 没有找到 PDF / DOCX 文件"
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # 显示文件
+    # --------------------------------------------------------
+
+    print()
+    print(
+        "发现以下法律文件:"
+    )
+
+    for index, file_path in enumerate(
+        documents,
+        start=1,
+    ):
+
+        print(
+            f"{index}. "
+            f"{file_path.name}"
+        )
+
+    print()
+
+    # --------------------------------------------------------
+    # 开始入库
+    # --------------------------------------------------------
+
+    ingest_documents(
+        documents
+    )
+
+
+# ============================================================
+# CLI
+# ============================================================
+
+if __name__ == "__main__":
+
+    main()
