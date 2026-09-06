@@ -1580,6 +1580,37 @@ def run_answer_builder(
         rules=rules,
     )
 
+    # --------------------------------------------------------
+    # V6.0-27 Fact → Condition Mapping
+    # --------------------------------------------------------
+    #
+    # 注意：
+    #
+    # Decision Adapter 执行时使用的是 DecisionResult 自带 Rules。
+    # 这些 Rules 可能只是 Decision Engine 选中的部分结构，
+    # 不一定包含 Retriever 返回的完整条件字段。
+    #
+    # merge_rules_into_decision() 执行后，
+    # adapted["rules"] 已经包含完整 Structured Rules。
+    #
+    # 因此 Fact → Condition Mapping 必须在 Rules 合并完成后
+    # 再建立一次，确保“三次 → 二次”数量门槛映射能够使用
+    # 完整 Structured Rules。
+    #
+    # 这里不会修改任何 ConditionResult。
+    # Mapping 只是事实与法律条件之间的显式依赖关系。
+    # --------------------------------------------------------
+
+    adapted["fact_condition_mappings"] = build_fact_condition_mappings(
+        question=question,
+        user_facts=ensure_list(
+            adapted.get("user_facts", [])
+        ),
+        rules=ensure_list(
+            adapted.get("rules", [])
+        ),
+    )
+
     # merge_rules_into_decision 只补充 Retriever 法律依据，
     # 不允许改变 Engine Decision / Condition Results。
     adapted["engine_decision"] = extract_engine_decision(
@@ -2086,6 +2117,31 @@ def build_ollama_prompt_v6(
         "23. UNKNOWN 条件必须保持原始语义。\n"
         "Structured Decision 中的 UNKNOWN ‘续订劳动合同’必须直接表达为该法律条件尚未确认，不得进一步解释、扩展或改写成‘第三次合同是否属于续订’、‘第三次合同是否为续订合同’或其他对第三次合同性质的重新判断。\n"
         "最终回答不得出现‘第三次劳动合同是否属于续订’、‘第三次合同是否属于续订’、‘第三次是否属于续订’等表达。\n"
+    )
+
+    prompt_parts.append(
+        "24. 严禁重新解释 UNKNOWN 条件的逻辑含义。\n"
+        "Structured Decision 中的 UNKNOWN 条件‘续订劳动合同’，只能作为一个尚未确认的独立法律条件原样保留。\n"
+        "不得将其改写为‘后续订立的劳动合同是否属于续订劳动合同’，也不得写成‘该后续合同属于续订劳动合同’、‘后续合同是否属于续订’、‘第三次合同是否属于续订’或其他具有相同逻辑含义的表达。\n"
+        "尤其不得把‘存在后续订立的劳动合同’这一已经 SATISFIED 的条件，与 UNKNOWN 的‘续订劳动合同’合并后重新制造一个新的事实判断。\n"
+        "最终回答必须严格区分：‘存在后续订立的劳动合同’是已经确认的条件；‘续订劳动合同’是 Engine 返回的 UNKNOWN 条件。二者不得互相改写、合并或推导。\n"
+    )
+
+    prompt_parts.append(
+        "25. 结论必须保留用户事实。\n"
+        "如果用户问题明确包含‘连续签订三次固定期限劳动合同’，结论中应优先说明‘用户已经明确提供连续签订三次固定期限劳动合同这一事实’以及该事实已经达到‘连续订立二次固定期限劳动合同’的数量门槛。\n"
+        "不得在结论开头直接把用户事实改写成‘连续订立二次固定期限劳动合同’而省略‘三次’事实。\n"
+        "‘二次’只能作为法律规则的最低数量门槛说明，不能替代用户已经提供的‘三次’事实。\n"
+    )
+
+    prompt_parts.append(
+        "26. 结论起点必须优先使用用户事实。\n"
+        "当用户问题明确陈述‘公司连续签订三次固定期限劳动合同’时，"
+        "【结论】部分第一句应优先以该用户事实作为事实起点，"
+        "例如‘根据你提供的事实，公司已经连续签订三次固定期限劳动合同……’。\n"
+        "随后可以说明‘三次已经达到法律规则中的连续订立二次固定期限劳动合同数量门槛’，"
+        "但不得在【结论】第一句直接以‘连续订立二次固定期限劳动合同’替代用户的‘三次’事实。\n"
+        "‘二次’只用于说明法律规则的最低数量门槛，不能替代用户事实。\n"
     )
     
     prompt_parts.append(
