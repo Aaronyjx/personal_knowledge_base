@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # ============================================================
-# RAG V6.0-23
+# RAG V6.0-27
 # Legal RAG Pipeline
 #
 # 完整流程：
@@ -154,9 +154,12 @@ import requests
 
 from src.retriever import build_context
 
-from src.legal_decision_engine import make_decision
+from src.legal_decision_engine import (
+    make_decision,
+)
 
 from src.legal_answer_builder import (
+    adapt_decision_for_answer_builder as builder_adapt_decision,
     build_plain_answer,
     get_value,
     safe_text,
@@ -167,7 +170,7 @@ from src.legal_answer_builder import (
 # 常量
 # ============================================================
 
-RAG_VERSION = "V6.0-23"
+RAG_VERSION = "V6.0-27"
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 
@@ -719,6 +722,24 @@ def build_rules_from_articles(
 
 
 # ============================================================
+# V6.0-27 Decision Engine Boundary
+# ============================================================
+#
+# V6.0-14 之后，Decision Engine 已经负责完整生成 8 条
+# ConditionResult。
+#
+# RAG 层不得再补充、删除或修改 ConditionResult。
+#
+# 特别是：
+#
+#     "存在后续订立的劳动合同"
+#
+# 已经由 Legal Decision Engine V6.0-14 正式产生。
+# RAG 不再使用旧版兼容函数追加该条件。
+#
+# ============================================================
+
+# ============================================================
 # Decision 状态提取
 # ============================================================
 
@@ -810,7 +831,7 @@ def enrich_conditional_conditions(
     rules: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     """
-    V6.0-23：取消 Adapter 层的法律条件推理。
+    V6.0-27：取消 Adapter 层的法律条件推理。
 
     核心原则：
 
@@ -823,7 +844,7 @@ def enrich_conditional_conditions(
        必须由 Engine 本身修复输出，而不是由 Adapter 猜测条件。
     """
 
-    # V6.0-23：故意不进行任何条件补全。
+    # V6.0-27：故意不进行任何条件补全。
     #
     # 旧版本的问题：
     #     Engine = CONDITIONAL
@@ -922,219 +943,331 @@ def _condition_category_map(
     return mapping
 
 
+def build_fact_condition_mappings(
+    question: str,
+    user_facts: List[str],
+    rules: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """
+    V6.0-27：Fact-to-Condition Mapping + Rule Dependency。
+
+    核心原则：
+
+    1. 用户事实“连续签订三次固定期限劳动合同”可以确定已经达到
+       “连续订立二次固定期限劳动合同”的数量门槛。
+    2. 该事实不能自动证明未来还会发生“续订劳动合同”。
+    3. 不能把“劳动者提出或者同意续订、订立劳动合同”改写成
+       “劳动者提出或者同意订立无固定期限劳动合同”。
+    4. 排除条件和例外条件必须保持 UNKNOWN，除非用户提供相应事实。
+    5. Mapping 只记录事实覆盖关系，不直接修改 Decision Engine 状态。
+
+    这里明确区分三个概念：
+
+        已签订三次固定期限合同
+                ↓
+        已达到连续订立二次的数量门槛
+                ↓
+        下一次是否发生续订 / 订立劳动合同
+                ↓
+        第十四条其它条件是否满足
+                ↓
+        法律后果
+
+    因此，“三次”绝不能被错误映射为“劳动者已经同意下一次续订”。
+    """
+    question_text = normalize_text(question)
+    facts = unique_texts(user_facts)
+    normalized_rules = build_rules_from_articles(rules)
+
+    has_three_contract_fact = (
+        "三次" in question_text
+        and "固定期限劳动合同" in question_text
+    ) or any(
+        "三次" in normalize_text(fact)
+        and "固定期限劳动合同" in normalize_text(fact)
+        for fact in facts
+    )
+
+    if not has_three_contract_fact:
+        return []
+
+    target_condition = "连续订立二次固定期限劳动合同"
+
+    for rule in normalized_rules:
+        conditions = ensure_list(
+            get_rule_value(rule, "conditions", "required_conditions")
+        )
+        for item in conditions:
+            if _condition_text(item) == target_condition:
+                return [{
+                    "fact": "公司连续签订三次固定期限劳动合同",
+                    "condition": target_condition,
+                    "status": "SATISFIED",
+                    "mapping_type": "NUMERIC_THRESHOLD",
+                    "dependency": "THREE_CONTRACTS_MEET_TWO_CONTRACT_THRESHOLD",
+                    "reason": (
+                        "用户明确说明连续签订三次固定期限劳动合同；三次已经达到连续订立二次固定期限劳动合同的最低数量门槛。"
+                    ),
+                    "does_not_prove": [
+                        "续订劳动合同",
+                        "劳动者提出或者同意续订、订立劳动合同",
+                        "不存在第三十九条规定情形",
+                        "不存在第四十条第一项规定情形",
+                        "不存在第四十条第二项规定情形",
+                        "劳动者未提出订立固定期限劳动合同",
+                    ],
+                }]
+
+    return []
+
+
+def validate_fact_condition_mapping(
+    answer: str,
+    question: str,
+    decision: Dict[str, Any],
+) -> bool:
+    """
+    V6.0-27：验证最终答案严格遵守 Fact → Condition → Consequence 依赖。
+
+    对“三次固定期限劳动合同”问题：
+
+    - 必须承认“三次”已经覆盖“连续订立二次固定期限劳动合同”数量门槛；
+    - 不得把“三次”重新制造成第三次合同是否存在/是否连续的 UNKNOWN；
+    - 不得把“是否续订劳动合同”偷换成“是否提出订立无固定期限劳动合同”；
+    - 不得把“三次”直接解释为劳动者已经提出或同意下一次订立无固定期限劳动合同。
+    """
+    if not answer:
+        return False
+
+    q = normalize_text(question)
+    has_three = (
+        "三次" in q and "固定期限劳动合同" in q
+    ) or any(
+        "三次" in normalize_text(fact)
+        and "固定期限劳动合同" in normalize_text(fact)
+        for fact in ensure_list(decision.get("user_facts", []))
+    )
+
+    if not has_three:
+        return True
+
+    forbidden_patterns = [
+        "第三次合同是否存在",
+        "是否已经签订第三份合同",
+        "第三次是否属于连续合同序列",
+        "劳动者是否在第三次续订时提出或同意订立无固定期限劳动合同",
+        "劳动者是否提出或同意订立无固定期限劳动合同",
+    ]
+
+    if any(pattern in answer for pattern in forbidden_patterns):
+        return False
+
+    # 禁止把“三次”事实直接等同于已经发生下一次续订或已经提出订立
+    # 无固定期限劳动合同。
+    invented_patterns = [
+        "三次合同已经证明劳动者同意续订",
+        "三次合同已经证明劳动者提出续订",
+        "三次合同已经证明劳动者提出订立无固定期限劳动合同",
+        "三次固定期限劳动合同即表示劳动者同意订立无固定期限劳动合同",
+        "已经证明劳动者同意订立无固定期限劳动合同",
+        "已经证明劳动者提出订立无固定期限劳动合同",
+        "已经证明劳动者同意签订无固定期限劳动合同",
+        "已经证明劳动者提出签订无固定期限劳动合同",
+        "已经证明劳动者同意订立无固定期限劳动合同的义务",
+        "三次固定期限劳动合同，所以已经证明劳动者同意订立无固定期限劳动合同",
+    ]
+
+    # 进一步防止条件语义偷换：
+    # “劳动者提出或者同意续订、订立劳动合同”是原始法律条件，
+    # 不能被改写成“劳动者已经提出/同意订立无固定期限劳动合同”。
+    # 后者属于更具体、且并非原条件的意思表示。
+    normalized_answer = normalize_text(answer)
+    has_wrong_indefinite_condition = (
+        ("劳动者同意" in normalized_answer or "劳动者提出" in normalized_answer)
+        and (
+            "订立无固定期限劳动合同" in normalized_answer
+            or "签订无固定期限劳动合同" in normalized_answer
+        )
+        and not (
+            "是否" in normalized_answer
+            or "尚未确认" in normalized_answer
+            or "不能证明" in normalized_answer
+            or "无法确认" in normalized_answer
+            or "不能直接证明" in normalized_answer
+            or "未明确" in normalized_answer
+            or "未知" in normalized_answer
+        )
+    )
+
+    return (
+        not any(pattern in answer for pattern in invented_patterns)
+        and not has_wrong_indefinite_condition
+    )
+
+
+
 def adapt_decision_for_answer_builder(
     decision: Any,
     question: str = "",
 ) -> Dict[str, Any]:
     """
-    V6.0-22 Decision Adapter。
+    V6.0-27 Decision Adapter。
 
-    核心修复：
+    架构边界：
 
-    1. 保留 Legal Decision Engine 的全部 Condition Results。
-    2. 根据 Structured Rules 将 Condition Results 分类为：
-           REQUIRED / EXCLUSION / EXCEPTION
-    3. Exclusion / Exception 不再错误塞入 unknown_conditions。
-    4. unknown_conditions 只保存“必备条件”中的 UNKNOWN。
-    5. 同时保留 category-specific condition results，供 Answer Builder
-       和 Final Validation 使用。
-    6. 不在 Adapter 层重新进行任何法律事实判断。
+        Legal Decision Engine V6.0-14
+                    ↓
+              DecisionResult
+                    ↓
+        Legal Answer Builder V6.0-14
+                    ↓
+            StructuredAnswer
+                    ↓
+              RAG presentation
+
+    本函数只负责接口适配，不重新进行法律推理。
+
+    关键要求：
+
+    1. 原始 8 条 ConditionResult 必须全部保留。
+    2. REQUIRED / EXCLUSION / EXCEPTION 严格分开。
+    3. UNKNOWN 只能来自 Engine 的实际状态。
+    4. 不根据问题自行制造 ConditionResult。
+    5. 不根据合同次数自行补充法律条件。
     """
 
     engine_status = extract_engine_decision(decision)
 
-    if engine_status == DECISION_DEFINITE:
-        builder_status = ANSWER_SATISFIED
-    elif engine_status == DECISION_NOT_ESTABLISHED:
-        builder_status = ANSWER_UNSATISFIED
+    structured = builder_adapt_decision(
+        decision,
+        strict=True,
+    )
+
+    if hasattr(structured, "to_dict"):
+        adapted = structured.to_dict()
+    elif isinstance(structured, dict):
+        adapted = dict(structured)
     else:
-        builder_status = ANSWER_CONDITIONAL
+        raise TypeError(
+            "Legal Answer Builder 必须返回 StructuredAnswer 或 dict"
+        )
 
-    conclusion = normalize_text(
-        get_field(decision, "conclusion", "")
+    # Engine 状态必须直接来自 DecisionResult。
+    adapted["engine_decision"] = engine_status
+
+    if engine_status == DECISION_DEFINITE:
+        adapted["decision"] = ANSWER_SATISFIED
+    elif engine_status == DECISION_NOT_ESTABLISHED:
+        adapted["decision"] = ANSWER_UNSATISFIED
+    else:
+        adapted["decision"] = ANSWER_CONDITIONAL
+
+    # DecisionResult 的正式字段是 explicit_facts。
+    # Builder 已经负责读取该字段。这里仅做旧接口兼容。
+    adapted["user_facts"] = unique_texts(
+        ensure_list(adapted.get("user_facts", []))
     )
 
-    facts = ensure_list(
-        get_field(decision, "facts", [])
+    normalized_rules = build_rules_from_articles(
+        ensure_list(
+            get_field(decision, "rules", [])
+        )
     )
 
-    user_facts = []
-    for fact in facts:
-        text = extract_fact_text(fact)
-        if text:
-            user_facts.append(text)
-
-    normalized_question = normalize_text(question)
-
-    if (
-        "三次" in normalized_question
-        and "固定期限劳动合同" in normalized_question
-    ):
-        canonical_three_fact = "公司连续签订三次固定期限劳动合同"
-        if not any(
-            "三次" in normalize_text(item)
-            and "固定期限劳动合同" in normalize_text(item)
-            for item in user_facts
-        ):
-            user_facts.append(canonical_three_fact)
-
-    user_facts = unique_texts(user_facts)
-
-    selected_rules = ensure_list(
-        get_field(decision, "rules", [])
+    adapted["fact_condition_mappings"] = build_fact_condition_mappings(
+        question=question,
+        user_facts=adapted["user_facts"],
+        rules=normalized_rules,
     )
-    normalized_rules = build_rules_from_articles(selected_rules)
-    category_map = _condition_category_map(normalized_rules)
 
+    # StructuredAnswer 的 condition_results 是唯一状态来源。
     raw_condition_results = ensure_list(
-        get_field(decision, "condition_results", [])
+        adapted.get("condition_results", [])
     )
 
-    # 如果 Engine 返回的 Rule 中已经带有 category/type 字段，优先读取；
-    # 否则使用 Structured Rules 的字段归属进行确定性分类。
     required_results = []
     exclusion_results = []
     exception_results = []
 
-    satisfied_conditions = []
-    unsatisfied_conditions = []
-    unknown_conditions = []
-
-    all_condition_results = []
-
-    for condition_result in raw_condition_results:
-        condition_name = normalize_text(
-            get_first_field(
-                condition_result,
-                ["condition", "name", "text"],
-                "",
-            )
-        )
-
-        if not condition_name:
+    for item in raw_condition_results:
+        if not isinstance(item, dict):
             continue
 
-        status = normalize_text(
-            get_field(condition_result, "status", "")
-        ).upper()
-
-        reason = normalize_text(
-            get_field(condition_result, "reason", "")
+        condition = normalize_text(
+            item.get("condition", "")
         )
+        if not condition:
+            continue
 
-        explicit_category = normalize_text(
-            get_first_field(
-                condition_result,
-                ["category", "condition_category", "type"],
-                "",
+        condition_type = normalize_text(
+            item.get(
+                "condition_type",
+                item.get("type", "REQUIRED"),
             )
         ).upper()
 
-        if explicit_category in {
-            "REQUIRED",
-            "EXCLUSION",
-            "EXCEPTION",
-        }:
-            category = explicit_category
-        else:
-            category = category_map.get(
-                condition_name,
-                "REQUIRED",
-            )
+        normalized_item = dict(item)
+        normalized_item["condition"] = condition
+        normalized_item["status"] = normalize_text(
+            item.get("status", ANSWER_UNKNOWN)
+        ).upper() or ANSWER_UNKNOWN
+        normalized_item["category"] = condition_type
 
-        item = {
-            "condition": condition_name,
-            "status": status or "UNKNOWN",
-            "category": category,
+        if condition_type == "EXCLUSION":
+            exclusion_results.append(normalized_item)
+        elif condition_type == "EXCEPTION":
+            exception_results.append(normalized_item)
+        else:
+            required_results.append(normalized_item)
+
+    adapted["condition_results"] = [
+        *required_results,
+        *exclusion_results,
+        *exception_results,
+    ]
+    adapted["required_condition_results"] = required_results
+    adapted["exclusion_condition_results"] = exclusion_results
+    adapted["exception_results"] = exception_results
+
+    # Builder 已经生成了这三个列表；这里再次按 Engine 原始结果
+    # 做确定性读取，确保没有旧字段残留。
+    adapted["satisfied_conditions"] = [
+        item["condition"]
+        for item in required_results
+        if item["status"] == ANSWER_SATISFIED
+    ]
+
+    adapted["unsatisfied_conditions"] = [
+        item["condition"]
+        for item in required_results
+        if item["status"] in {"NOT_SATISFIED", ANSWER_UNSATISFIED}
+    ]
+
+    adapted["unknown_conditions"] = [
+        {
+            "condition": item["condition"],
+            **({"reason": normalize_text(item.get("reason", ""))}
+               if normalize_text(item.get("reason", "")) else {}),
         }
+        for item in required_results
+        if item["status"] == ANSWER_UNKNOWN
+    ]
 
-        if reason:
-            item["reason"] = reason
-
-        all_condition_results.append(item)
-
-        if category == "EXCLUSION":
-            exclusion_results.append(item)
-        elif category == "EXCEPTION":
-            exception_results.append(item)
-        else:
-            required_results.append(item)
-
-        # Answer Builder 的传统状态列表只统计 REQUIRED 条件。
-        # Exclusion / Exception 单独保存，避免语义污染。
-        if category != "REQUIRED":
-            continue
-
-        if status == "SATISFIED":
-            satisfied_conditions.append(condition_name)
-        elif status in {"NOT_SATISFIED", "UNSATISFIED"}:
-            unsatisfied_conditions.append(condition_name)
-        else:
-            unknown_item = {"condition": condition_name}
-            if reason:
-                unknown_item["reason"] = reason
-            unknown_conditions.append(unknown_item)
-
-    required_conditions = _condition_list_from_rule(
-        normalized_rules,
-        ["conditions", "required_conditions"],
+    adapted["engine_condition_results_count"] = len(
+        get_field(decision, "condition_results", []) or []
     )
-    exclusion_conditions = _condition_list_from_rule(
-        normalized_rules,
-        ["exclusion_conditions", "exclusions"],
-    )
-    exceptions = _condition_list_from_rule(
-        normalized_rules,
-        ["exceptions", "exception_conditions"],
+    adapted["engine_output_incomplete"] = (
+        engine_status == DECISION_CONDITIONAL
+        and adapted["engine_condition_results_count"] != 8
     )
 
-    # 去重，保持顺序。
-    satisfied_conditions = unique_texts(satisfied_conditions)
-    unsatisfied_conditions = unique_texts(unsatisfied_conditions)
+    adapted["conclusion"] = normalize_text(
+        get_field(decision, "conclusion", "")
+    )
 
-    dedup_unknown = []
-    seen_unknown = set()
-    for item in unknown_conditions:
-        condition = _condition_text(item)
-        reason = normalize_text(
-            item.get("reason", "")
-            if isinstance(item, dict)
-            else ""
-        )
-        key = (condition, reason)
-        if not condition or key in seen_unknown:
-            continue
-        seen_unknown.add(key)
-        value = {"condition": condition}
-        if reason:
-            value["reason"] = reason
-        dedup_unknown.append(value)
+    adapted["raw_decision"] = decision
 
-    unknown_conditions = dedup_unknown
-
-    return {
-        "decision": builder_status,
-        "engine_decision": engine_status,
-        "conclusion": conclusion,
-        "user_facts": user_facts,
-        "required_conditions": required_conditions,
-        "exclusion_conditions": exclusion_conditions,
-        "exceptions": exceptions,
-        "required_condition_results": required_results,
-        "exclusion_condition_results": exclusion_results,
-        "exception_results": exception_results,
-        "condition_results": all_condition_results,
-        "satisfied_conditions": satisfied_conditions,
-        "unsatisfied_conditions": unsatisfied_conditions,
-        "unknown_conditions": unknown_conditions,
-        "engine_condition_results_count": len(raw_condition_results),
-        "engine_output_incomplete": (
-            engine_status == DECISION_CONDITIONAL
-            and not raw_condition_results
-        ),
-        "rules": normalized_rules,
-        "raw_decision": decision,
-    }
+    return adapted
 
 
 # ============================================================
@@ -1354,7 +1487,7 @@ def run_decision_engine(
 
     print()
     print("=" * 70)
-    print("Step 2 / Legal Decision Engine V6.0-10-FIXED")
+    print("Step 2 / Legal Decision Engine V6.0-14")
     print("=" * 70)
 
     print()
@@ -1426,14 +1559,19 @@ def run_answer_builder(
     rules: List[Dict[str, Any]],
     question: str = "",
 ) -> Dict[str, Any]:
+    """
+    Step 3：调用正式 Legal Answer Builder V6.0-14。
+
+    Builder 只读取 DecisionResult，RAG 不再修改 ConditionResult。
+    """
 
     print()
     print("=" * 70)
-    print("Step 3 / Legal Answer Builder V6.0-7")
+    print("Step 3 / Legal Answer Builder V6.0-14")
     print("=" * 70)
 
     adapted = adapt_decision_for_answer_builder(
-        decision,
+        decision=decision,
         question=question,
     )
 
@@ -1442,44 +1580,56 @@ def run_answer_builder(
         rules=rules,
     )
 
+    # merge_rules_into_decision 只补充 Retriever 法律依据，
+    # 不允许改变 Engine Decision / Condition Results。
+    adapted["engine_decision"] = extract_engine_decision(
+        decision
+    )
+    adapted["raw_decision"] = decision
+    adapted["engine_condition_results_count"] = len(
+        ensure_list(
+            get_field(
+                decision,
+                "condition_results",
+                [],
+            )
+        )
+    )
+
     print()
+    print("✅ Structured Answer 已生成")
     print(
-        "✅ Structured Answer 已生成"
+        f"Engine Decision：{adapted['engine_decision']}"
     )
-
     print(
-        f"Engine Decision："
-        f"{adapted['engine_decision']}"
+        f"Structured Decision：{adapted['decision']}"
     )
-
     print(
-        f"Structured Decision："
-        f"{adapted['decision']}"
+        f"User Facts：{len(adapted.get('user_facts', []))}"
     )
-
     print(
-        f"User Facts："
-        f"{len(adapted['user_facts'])}"
+        f"Condition Results：{len(adapted.get('condition_results', []))}"
     )
-
     print(
-        f"Satisfied Conditions："
-        f"{len(adapted['satisfied_conditions'])}"
+        f"REQUIRED：{len(adapted.get('required_condition_results', []))}"
     )
-
     print(
-        f"Unsatisfied Conditions："
-        f"{len(adapted['unsatisfied_conditions'])}"
+        f"EXCLUSION：{len(adapted.get('exclusion_condition_results', []))}"
     )
-
     print(
-        f"Unknown Conditions："
-        f"{len(adapted['unknown_conditions'])}"
+        f"EXCEPTION：{len(adapted.get('exception_results', []))}"
     )
-
     print(
-        f"Legal Rules："
-        f"{len(adapted['rules'])}"
+        f"Satisfied Conditions：{len(adapted.get('satisfied_conditions', []))}"
+    )
+    print(
+        f"Unsatisfied Conditions：{len(adapted.get('unsatisfied_conditions', []))}"
+    )
+    print(
+        f"Unknown Conditions：{len(adapted.get('unknown_conditions', []))}"
+    )
+    print(
+        f"Legal Rules：{len(adapted.get('rules', []))}"
     )
 
     return adapted
@@ -1561,6 +1711,27 @@ def build_ollama_prompt_v6(
         or
         "当前没有提取到明确用户事实。"
     )
+
+    fact_condition_mappings = ensure_list(
+        decision.get("fact_condition_mappings", [])
+    )
+
+    mapping_lines = []
+    for mapping in fact_condition_mappings:
+        if not isinstance(mapping, dict):
+            continue
+        fact = normalize_text(mapping.get("fact", ""))
+        condition = normalize_text(mapping.get("condition", ""))
+        status = normalize_text(mapping.get("status", "UNKNOWN")).upper()
+        reason = normalize_text(mapping.get("reason", ""))
+        if not fact or not condition:
+            continue
+        line = f"- 用户事实：{fact} → 法律条件：{condition} = {status}"
+        if reason:
+            line += f"；依据：{reason}"
+        mapping_lines.append(line)
+
+    mapping_text = "\n".join(mapping_lines) or "无。"
 
     satisfied_text = (
         "\n".join(
@@ -1697,7 +1868,7 @@ def build_ollama_prompt_v6(
     )
 
     prompt_parts.append(
-        "你现在处于 RAG V6.0-23 最终回答阶段。\n"
+        "你现在处于 RAG V6.0-27 最终回答阶段。\n"
     )
 
     prompt_parts.append(
@@ -1713,6 +1884,15 @@ def build_ollama_prompt_v6(
         "用户问题\n"
         "============================================================\n"
         f"{question}\n"
+    )
+
+    prompt_parts.append(
+        "\n============================================================\n"
+        "Fact-to-Condition Mapping（事实到法律条件映射）\n"
+        "============================================================\n"
+        f"{mapping_text}\n"
+        "以上映射是系统已经确定的事实覆盖关系。SATISFIED 映射不得被改写为 UNKNOWN。\n"
+        "映射只证明明确列出的条件，不代表其它法律条件自动成立。\n"
     )
 
     prompt_parts.append(
@@ -1861,20 +2041,21 @@ def build_ollama_prompt_v6(
     )
 
     prompt_parts.append(
-        "14. 特别规则：用户事实‘连续签订三次固定期限劳动合同’不得被解释为与‘连续订立二次固定期限劳动合同后第三次续订’当然冲突。\n"
-        "在本题语境下，‘连续签订三次固定期限劳动合同’已经明确包含三次合同、连续合同序列以及第三份合同已经签订这一事实。\n"
-        "因此不得再制造‘第三次合同是否存在’、‘是否已经签订第三份合同’、‘第三次是否属于连续合同序列’或‘第三次合同是否属于续订’作为 UNKNOWN。\n"
-        "尤其不得输出‘第三次合同是否属于续订需进一步确认’、‘第三次是否属于续订情形尚不明确’等与已确认用户事实重复冲突的未知条件。\n"
-        "该用户事实可以直接满足法律规则中的‘连续订立二次固定期限劳动合同’数量门槛；这里的‘二次’是法律规则的最低数量门槛，不是对用户‘三次’事实的改写。\n"
-        "如果需要保留 UNKNOWN，只能针对用户确实没有提供、且属于结构化法律规则要求的其他法定条件或法定例外。\n"
+        "14. V6.0-25 Fact-to-Condition Mapping / Rule Dependency 规则。\n"
+        "用户事实‘连续签订三次固定期限劳动合同’已经明确证明：连续固定期限合同的数量至少达到二次，因此‘连续订立二次固定期限劳动合同’这一数量门槛为 SATISFIED。\n"
+        "但是，该事实不等于已经发生下一次‘续订劳动合同’，也不等于劳动者已经提出或同意下一次续订、订立劳动合同，更不等于劳动者已经提出订立无固定期限劳动合同。\n"
+        "本题中的‘续订劳动合同’应理解为在相关固定期限合同到期后是否实际发生下一次劳动合同续订这一法律事实；不得把第三次已经签订的事实错误改写为‘第三次是否属于续订’。\n"
+        "如果用户只说明‘连续签订三次固定期限劳动合同’，则只能自动满足数量门槛；其它条件仍按照 Structured Decision 的状态处理。\n"
     )
 
     prompt_parts.append(
-        "15. 严禁自行创造结构化 Rules 中没有出现的法律条件、前置条件或法定例外。\n"
-        "如果某个条件没有出现在 Structured Rules / Decision 中，不得为了让 CONDITIONAL 更完整而自行补充。\n"
-        "16. 特别禁止把‘劳动者未提出/未明确提出订立或签订无固定期限劳动合同’写成签订无固定期限劳动合同的前置条件，除非该条件在 Structured Rules 中明确出现。\n"
-        "17. 不得用‘劳动者不符合无固定期限劳动合同的条件’、‘劳动者不符合订立无固定期限劳动合同的条件’等笼统表述制造新的法律例外。必须对应具体 Structured Rule。\n"
-        "18. ‘其他法定条件’不能作为模型自行增加的兜底法律条件。只有 Structured Rules 明确存在对应条件时，才能引用该条件。\n"
+        "15. 严禁把‘劳动者提出或者同意续订、订立劳动合同’偷换成‘劳动者提出或者同意订立无固定期限劳动合同’。\n"
+        "前者是 Structured Rule 的法律条件；后者不是同一个条件，除非 Structured Rules 明确如此表述，否则不得自行创造。\n"
+        "16. 严禁把‘三次固定期限劳动合同’直接解释为劳动者已经提出或同意下一次续订，也不得解释为劳动者已经选择无固定期限劳动合同。\n"
+        "17. 排除条件和例外条件必须保持独立语义：UNKNOWN 排除条件表示尚不能确认相应排除情形不存在；UNKNOWN 例外表示尚不能确认例外是否存在。不得将其改写成肯定事实。\n"
+        "18. 不得自行创造 Structured Rules 中不存在的‘其他法定条件’。\n"
+        "19. CONDITIONAL 必须保持条件性；如果存在 REQUIRED UNKNOWN，最终回答必须明确指出尚未确认的必备条件。\n"
+        "20. 用户事实与法律规则必须同时保留：‘三次’是用户事实，‘二次’是法律规则数量门槛，两者不能互相替换。\n"
     )
 
     prompt_parts.append(
@@ -2237,29 +2418,20 @@ def validate_no_manufactured_unknown(
     decision: Dict[str, Any],
 ) -> bool:
     """
-    V6.0-18：禁止 Ollama 对已经明确确认的用户事实再次制造 UNKNOWN。
-
-    当前重点保护：
-        用户事实“连续签订三次固定期限劳动合同”。
-
-    该事实已经明确包含三次合同及连续合同序列。
-    因此，以下问题不能再次被当成未知事实：
-        - 第三次合同是否存在
-        - 是否已经签订第三份合同
-        - 第三次是否属于连续合同序列
-        - 第三次合同是否属于续订
+    V6.0-27：禁止对已经明确存在的合同事实再次制造 UNKNOWN。
 
     注意：
-        “第三次续订”作为法律规则的描述可以出现；
-        只有将上述事项写成“是否……、尚不明确、需进一步确认”等未知
-        判断时才判定为 Validation 失败。
+
+    “续订劳动合同”本身仍然可以是 Engine 返回的 UNKNOWN。
+    本检查只禁止把用户已经明确给出的：
+
+        公司连续签订三次固定期限劳动合同
+
+    再写成“第三份合同是否存在”等重复事实确认。
     """
 
     facts = ensure_list(
-        decision.get(
-            "user_facts",
-            [],
-        )
+        decision.get("user_facts", [])
     )
 
     fact_text = "；".join(
@@ -2267,18 +2439,15 @@ def validate_no_manufactured_unknown(
         for item in facts
     )
 
-    has_three_fact = (
+    if not (
         "三次" in fact_text
         and "固定期限劳动合同" in fact_text
-    )
-
-    if not has_three_fact:
+    ):
         return True
 
     answer_text = normalize_text(answer)
 
-    # 明确禁止的“重复事实确认”型 UNKNOWN。
-    forbidden_unknown_patterns = [
+    forbidden = [
         "第三次合同是否存在",
         "第三次合同是否已经存在",
         "第三份合同是否存在",
@@ -2287,17 +2456,9 @@ def validate_no_manufactured_unknown(
         "是否已经签订第三次合同",
         "第三次是否属于连续合同序列",
         "第三次合同是否属于连续合同序列",
-        "第三次是否属于续订",
-        "第三次合同是否属于续订",
-        "第三次是否属于续订情形",
-        "第三次合同是否属于续订情形",
-        "第三次续订是否明确",
-        "第三次续订是否成立",
     ]
 
-    # 只有当这些表达附近同时出现明显 UNKNOWN 语义时才拦截，
-    # 避免正常法律规则说明中的“第三次续订”被误伤。
-    unresolved_markers = [
+    unresolved = [
         "是否",
         "尚不明确",
         "尚未明确",
@@ -2314,25 +2475,11 @@ def validate_no_manufactured_unknown(
         "待确认",
     ]
 
-    for pattern in forbidden_unknown_patterns:
-        if pattern not in answer_text:
-            continue
-
-        if any(marker in answer_text for marker in unresolved_markers):
-            return False
-
-    # 对最常见的完整错误句式进行直接拦截。
-    direct_forbidden = [
-        "第三次合同是否属于续订需进一步确认",
-        "第三次合同是否属于续订需要进一步确认",
-        "第三次是否属于续订情形尚不明确",
-        "第三次合同是否属于续订情形尚不明确",
-        "第三次是否属于续订需要进一步确认",
-        "第三次合同是否属于续订需要进一步判断",
-    ]
-
-    for pattern in direct_forbidden:
-        if pattern in answer_text:
+    for pattern in forbidden:
+        if pattern in answer_text and any(
+            marker in answer_text
+            for marker in unresolved
+        ):
             return False
 
     return True
@@ -2347,7 +2494,7 @@ def validate_legal_condition_invention(
     decision: Dict[str, Any],
 ) -> bool:
     """
-    V6.0-23：法律条件防臆造验证。
+    V6.0-27：法律条件防臆造验证。
 
     核心原则：
 
@@ -2443,11 +2590,25 @@ def validate_legal_condition_invention(
     # 明显的法律条件臆造模式。
     # --------------------------------------------------------
     #
-    # 注意：这里不是简单禁止“劳动者提出”四个字。
-    # 因为某些真实法律规则本身可能包含“劳动者提出”的条件。
-    # 只禁止本题中典型的错误法律命题：
-    #     “劳动者没有/未提出无固定期限合同”
-    #     → 被当成必须签无固定期限合同的前置条件。
+    # 注意：
+    #
+    # 不能仅仅因为回答“提到了”错误条件，就认定模型臆造了该条件。
+    #
+    # 例如：
+    #
+    #     “不能将‘劳动者未提出订立无固定期限劳动合同’
+    #      作为本题的判断前提。”
+    #
+    # 这是在“否定错误条件”，不是在“创造错误条件”。
+    #
+    # 因此必须区分：
+    #
+    #     正向使用错误条件
+    #
+    # 与：
+    #
+    #     否定 / 禁止 / 纠正错误条件
+    #
     # --------------------------------------------------------
 
     invented_patterns = [
@@ -2476,6 +2637,89 @@ def validate_legal_condition_invention(
         "劳动者不具备签订无固定期限劳动合同的条件",
         "劳动者不具备无固定期限劳动合同的条件",
     ]
+
+    # --------------------------------------------------------
+    # 判断某个错误条件是否只是被“否定/禁止/纠正”提及。
+    # --------------------------------------------------------
+
+    negation_patterns = [
+        "不能将",
+        "不能把",
+        "不得将",
+        "不得把",
+        "不应将",
+        "不应把",
+        "禁止将",
+        "禁止把",
+        "不可将",
+        "不可把",
+        "不宜将",
+        "不能认为",
+        "不得认为",
+        "不应认为",
+        "不能视为",
+        "不得视为",
+        "不应视为",
+        "并不能证明",
+        "不能证明",
+        "不足以证明",
+        "不足以认定",
+        "不能据此认定",
+        "不能据此认为",
+        "不属于",
+        "并非",
+        "不是",
+        "并不能作为",
+        "不能作为",
+        "不得作为",
+        "不应作为",
+        "不应当作为",
+    ]
+
+    # --------------------------------------------------------
+    # 逐项检查。
+    # --------------------------------------------------------
+
+    for pattern in invented_patterns:
+
+        position = answer_text.find(pattern)
+
+        if position < 0:
+            continue
+
+        # 取出错误条件前面的有限上下文。
+        #
+        # 中文法律回答中，否定性表达通常会紧邻被否定的条件。
+        context_start = max(
+            0,
+            position - 40,
+        )
+
+        prefix_context = answer_text[
+            context_start:position
+        ]
+
+        # 如果错误条件只是出现在：
+        #
+        #     不能将……
+        #     不得把……
+        #     不能证明……
+        #
+        # 等纠错性上下文中，则不能判定为“臆造”。
+        if any(
+            marker in prefix_context
+            for marker in negation_patterns
+        ):
+            continue
+
+        # 如果 Structured Rules 明确存在该条件，
+        # 则也不能视为新条件。
+        if pattern in rule_text:
+            continue
+
+        # 到这里才认为模型真正把该错误条件当作
+        # 当前法律判断的一个实质性前提。
+        return False
 
     # 如果 Rules 中没有对应条件，则属于新增法律条件。
     for pattern in invented_patterns:
@@ -2968,7 +3212,7 @@ def validate_legal_basis(
     rules: List[Dict[str, Any]],
 ) -> bool:
     """
-    V6.0-23 法律依据验证。
+    V6.0-27 法律依据验证。
 
     核心原则：
 
@@ -3003,7 +3247,7 @@ def validate_legal_basis(
     allowed_keys = set()
 
     # --------------------------------------------------------
-    # V6.0-23：区分“法律依据法条”和“结构化规则中的交叉引用”
+    # V6.0-27：区分“法律依据法条”和“结构化规则中的交叉引用”
     # --------------------------------------------------------
     #
     # 本次实际失败原因：
@@ -3212,26 +3456,17 @@ def validate_engine_condition_completeness(
     decision: Dict[str, Any],
 ) -> bool:
     """
-    V6.0-23：验证 Engine 的 Condition Results 完整性。
+    V6.0-27：验证 Decision Engine V6.0-14 的 ConditionResult 完整性。
 
-    V6.0-21 的问题：
+    正常结构固定为：
 
-        Decision Engine 返回的是 DecisionResult 对象，
-        Adapter 将其保存为 raw_decision。
+        REQUIRED   = 4
+        EXCLUSION  = 3
+        EXCEPTION  = 1
+        TOTAL      = 8
 
-        原验证逻辑只接受：
-            isinstance(raw_decision, dict)
-
-        因此真实的 DecisionResult 对象会被错误读取成 0 条 Condition Results，
-        即使 Step 2 已经打印出：
-            Condition Results：7
-
-    V6.0-22 修复：
-
-        1. 优先读取 Adapter 已保存的 engine_condition_results_count。
-        2. 同时兼容 dict / object 两种 raw_decision。
-        3. CONDITIONAL + 真实 Condition Results > 0 才通过。
-        4. 不再因为 DecisionResult 是对象而误报 ENGINE_CONDITION_COMPLETENESS。
+    CONDITIONAL 情况下如果不是完整 8 条，必须进入安全 Fallback，
+    RAG 不得自行补条件。
     """
 
     if not isinstance(decision, dict):
@@ -3241,26 +3476,27 @@ def validate_engine_condition_completeness(
         decision.get("engine_decision", "")
     ).upper()
 
-    if engine_decision != DECISION_CONDITIONAL:
-        return True
-
     count = decision.get(
         "engine_condition_results_count",
         None,
     )
 
-    if isinstance(count, int):
-        return count > 0
+    if not isinstance(count, int):
+        raw_decision = decision.get("raw_decision")
+        count = len(
+            ensure_list(
+                get_field(
+                    raw_decision,
+                    "condition_results",
+                    [],
+                )
+            )
+        )
 
-    raw_decision = decision.get("raw_decision")
+    if engine_decision == DECISION_CONDITIONAL:
+        return count == 8
 
-    raw_results = get_field(
-        raw_decision,
-        "condition_results",
-        [],
-    )
-
-    return len(ensure_list(raw_results)) > 0
+    return count == 0 or count == 8
 
 
 # ============================================================
@@ -3271,52 +3507,84 @@ def validate_condition_categories(
     decision: Dict[str, Any],
 ) -> bool:
     """
-    V6.0-23：验证 Adapter 是否正确保留三类法律条件。
+    V6.0-27：严格验证 Engine V6.0-14 的三类 ConditionResult。
 
-    REQUIRED / EXCLUSION / EXCEPTION 必须严格分开。
-    该检查只验证数据结构，不重新进行法律判断。
+        REQUIRED   = 4
+        EXCLUSION  = 3
+        EXCEPTION  = 1
+        TOTAL      = 8
+
+    分类直接来自 ConditionResult.condition_type / type，
+    不再从 Rules 猜测类别。
     """
 
     if not isinstance(decision, dict):
         return False
 
-    required = set(
-        _condition_list_from_rule(
-            ensure_list(decision.get("rules", [])),
-            ["conditions", "required_conditions"],
-        )
-    )
-    exclusion = set(
-        _condition_list_from_rule(
-            ensure_list(decision.get("rules", [])),
-            ["exclusion_conditions", "exclusions"],
-        )
-    )
-    exceptions = set(
-        _condition_list_from_rule(
-            ensure_list(decision.get("rules", [])),
-            ["exceptions", "exception_conditions"],
-        )
+    results = ensure_list(
+        decision.get("condition_results", [])
     )
 
-    # 三类结构之间不应出现同名交叉。
-    if required & exclusion:
-        return False
-    if required & exceptions:
-        return False
-    if exclusion & exceptions:
+    if len(results) != 8:
         return False
 
-    # unknown_conditions 只能来自 REQUIRED。
-    for item in ensure_list(decision.get("unknown_conditions", [])):
-        condition = _condition_text(item)
-        if not condition:
-            continue
-        if condition not in required:
+    counts = {
+        "REQUIRED": 0,
+        "EXCLUSION": 0,
+        "EXCEPTION": 0,
+    }
+
+    names = set()
+
+    for item in results:
+        if not isinstance(item, dict):
             return False
 
-    return True
+        condition = normalize_text(
+            item.get("condition", "")
+        )
+        status = normalize_text(
+            item.get("status", "")
+        ).upper()
+        category = normalize_text(
+            item.get(
+                "condition_type",
+                item.get(
+                    "category",
+                    item.get("type", ""),
+                ),
+            )
+        ).upper()
 
+        if not condition or not category:
+            return False
+
+        if category not in counts:
+            return False
+
+        if status not in {
+            "SATISFIED",
+            "NOT_SATISFIED",
+            "UNKNOWN",
+            "UNSATISFIED",
+        }:
+            return False
+
+        if condition in names:
+            return False
+
+        names.add(condition)
+        counts[category] += 1
+
+    return counts == {
+        "REQUIRED": 4,
+        "EXCLUSION": 3,
+        "EXCEPTION": 1,
+    }
+
+# ============================================================
+# Final Validation
+# ============================================================
 
 def final_validation(
     answer: str,
@@ -3324,13 +3592,30 @@ def final_validation(
     decision: Dict[str, Any],
 ) -> str:
     """
-    V6.0-13 最终回答验证。
+    RAG V6.0-27 Final Validation。
 
-    与 V6.0-9 的关键区别：
+    最终验证层负责：
 
-    如果 Ollama 输出没有通过关键安全验证，V6.0-10 不再直接把
-    未通过验证的回答作为最终答案返回，而是自动切换到 Python
-    Fallback，再进行一次验证。
+        Ollama Answer
+              ↓
+        Structural Validation
+              ↓
+        Fact Validation
+              ↓
+        Condition Validation
+              ↓
+        Legal Basis Validation
+              ↓
+        PASS / Deterministic Fallback
+
+    核心原则：
+
+    1. 不修改 Legal Decision Engine 输出。
+    2. 不由 Validation 层重新进行法律推理。
+    3. Ollama 失败或验证失败时，只允许使用确定性的 Python Fallback。
+    4. Fallback 仍然必须经过同一套安全验证。
+    5. 如果 Engine 的 ConditionResult 不完整，绝不由 RAG 自行补条件。
+    6. 最终绝不返回未经验证的 Ollama 原始答案。
     """
 
     print()
@@ -3338,14 +3623,29 @@ def final_validation(
     print("Step 5 / Final Validation")
     print("=" * 70)
 
+    question = normalize_text(question)
     answer = clean_answer(answer)
 
+    if not isinstance(decision, dict):
+        print()
+        print("⚠️ Decision 不是有效 Dict，使用空安全回答。")
+        return build_fallback_answer(
+            question=question,
+            decision={},
+        )
+
     def run_checks(text: str) -> List[str]:
-        failures = []
+        failures: List[str] = []
 
         if not text:
             failures.append("EMPTY")
             return failures
+
+        if not validate_engine_condition_completeness(decision):
+            failures.append("ENGINE_CONDITION_COMPLETENESS")
+
+        if not validate_condition_categories(decision):
+            failures.append("CONDITION_CATEGORY")
 
         if not validate_answer_structure(text):
             failures.append("STRUCTURE")
@@ -3356,37 +3656,52 @@ def final_validation(
         if not validate_three_contract_fact(text, decision):
             failures.append("THREE_CONTRACT_FACT")
 
-        if not validate_no_manufactured_unknown(text, decision):
+        if not validate_fact_condition_mapping(
+            text,
+            question,
+            decision,
+        ):
+            failures.append("FACT_CONDITION_MAPPING")
+
+        if not validate_no_manufactured_unknown(
+            text,
+            decision,
+        ):
             failures.append("MANUFACTURED_UNKNOWN")
 
-        if not validate_legal_condition_invention(text, decision):
+        if not validate_legal_condition_invention(
+            text,
+            decision,
+        ):
             failures.append("LEGAL_CONDITION_INVENTION")
 
-        if not validate_conditional_state(text, decision):
+        if not validate_conditional_state(
+            text,
+            decision,
+        ):
             failures.append("CONDITIONAL")
 
-        if not validate_unknown_conditions(text, decision):
+        if not validate_unknown_conditions(
+            text,
+            decision,
+        ):
             failures.append("UNKNOWN")
-
-        if not validate_condition_categories(decision):
-            failures.append("CONDITION_CATEGORY")
 
         rules = ensure_list(
             decision.get("rules", [])
         )
 
-        if not validate_legal_basis(text, rules):
+        if not validate_legal_basis(
+            text,
+            rules,
+        ):
             failures.append("LEGAL_BASIS")
 
-        if not validate_decision_consistency(text, decision):
+        if not validate_decision_consistency(
+            text,
+            decision,
+        ):
             failures.append("DECISION_CONSISTENCY")
-
-        # V6.0-23：CONDITIONAL 必须具有真实的 Condition Results。
-        # 如果 Engine 输出 CONDITIONAL + 0 Condition Results，
-        # 后续 Adapter / Ollama 不得猜测法律条件，必须直接判定
-        # Engine 输出不完整并进入安全 Fallback。
-        if not validate_engine_condition_completeness(decision):
-            failures.append("ENGINE_CONDITION_COMPLETENESS")
 
         return failures
 
@@ -3403,8 +3718,17 @@ def final_validation(
         + ", ".join(failures)
     )
 
+    # --------------------------------------------------------
+    # 安全 Fallback
+    # --------------------------------------------------------
+    #
+    # 只要任意一项验证失败，就不能继续信任 Ollama 输出。
+    # Fallback 使用已经完成的 Structured Decision / Rules，
+    # 不重新推理，也不补充 Decision Engine 没有提供的条件。
+    # --------------------------------------------------------
+
     print()
-    print("⚠️ V6.0-22 启用安全 Fallback。")
+    print("⚠️ V6.0-27 启用安全 Fallback。")
 
     fallback = build_fallback_answer(
         question=question,
@@ -3426,12 +3750,9 @@ def final_validation(
     )
 
     # 最后返回确定性的结构化 Fallback，而不是返回未经验证的 Ollama 答案。
+    # 不递归调用 final_validation，避免无限递归。
     return fallback
 
-
-# ============================================================
-# Python Fallback
-# ============================================================
 
 def build_fallback_answer(
     question: str,
@@ -3465,7 +3786,7 @@ def build_fallback_answer(
 
     print()
     print("=" * 70)
-    print("Fallback / Deterministic Legal Answer Builder V6.0-22")
+    print("Fallback / Deterministic Legal Answer Builder V6.0-25")
     print("=" * 70)
 
     question = normalize_text(question)
@@ -3876,6 +4197,9 @@ def build_fallback_answer(
         notice_lines.append(
             "- “连续订立二次固定期限劳动合同”可以作为法律规则中的数量门槛出现；这里的“二次”是法律条件表达，不是对用户“三次”事实的替换。"
         )
+        notice_lines.append(
+            "- 事实映射：用户“三次”事实已经覆盖“连续订立二次固定期限劳动合同”的数量门槛；该映射不代表其它法律条件自动成立。"
+        )
 
     if unknown:
         notice_lines.append(
@@ -3923,12 +4247,44 @@ def build_fallback_answer(
 # ============================================================
 
 def component_test():
+    """
+    RAG V6.0-26-FIXED Component Test。
+
+    本测试不依赖 Ollama 生成结果，专门验证 V6.0-25 新增的：
+
+        Fact
+          ↓
+        Condition
+          ↓
+        Rule Dependency
+          ↓
+        Legal Consequence
+
+    测试重点：
+
+    1. “连续签订三次固定期限劳动合同”必须映射为：
+           连续订立二次固定期限劳动合同 = SATISFIED
+
+    2. “三次”不得自动证明：
+           - 续订劳动合同
+           - 劳动者提出或者同意续订、订立劳动合同
+           - 第39条 / 第40条排除情形不存在
+           - 劳动者未提出订立固定期限劳动合同
+
+    3. Required / Exclusion / Exception 必须保持独立分类。
+
+    4. unknown_conditions 只能包含 Required UNKNOWN。
+
+    5. 不允许把法律条件偷换成：
+           “劳动者是否提出或同意订立无固定期限劳动合同”。
+
+    6. Final Fact-to-Condition Validation 必须接受正确表达，
+       拒绝错误的条件偷换。
+    """
 
     print()
     print("=" * 70)
-    print(
-        f"RAG {RAG_VERSION} Component Test"
-    )
+    print(f"RAG {RAG_VERSION} Component Test")
     print("=" * 70)
 
     question = (
@@ -3937,12 +4293,10 @@ def component_test():
     )
 
     print()
-    print(
-        f"问题：{question}"
-    )
+    print(f"问题：{question}")
 
     # --------------------------------------------------------
-    # Step 1
+    # Step 1：Retriever / Structured Context
     # --------------------------------------------------------
 
     context_data = build_structured_context(
@@ -3951,13 +4305,17 @@ def component_test():
         score_threshold=0.55,
     )
 
-    rules = context_data.get(
-        "rules",
-        [],
+    rules = ensure_list(context_data.get("rules", []))
+
+    assert len(rules) > 0, (
+        "V6.0-27 Component Test：没有检索到任何法律规则"
     )
 
+    print()
+    print(f"Structured Rules：{len(rules)}")
+
     # --------------------------------------------------------
-    # Step 2
+    # Step 2：Legal Decision Engine
     # --------------------------------------------------------
 
     decision = run_decision_engine(
@@ -3965,8 +4323,18 @@ def component_test():
         rules=rules,
     )
 
+    engine_condition_results = ensure_list(
+        get_field(decision, "condition_results", [])
+    )
+
+    assert len(engine_condition_results) == 8, (
+        "V6.0-27 Component Test：Engine Condition Results 应为 8"
+    )
+
+    print(f"Engine Condition Results：{len(engine_condition_results)}")
+
     # --------------------------------------------------------
-    # Step 3
+    # Step 3：Answer Builder Adapter
     # --------------------------------------------------------
 
     adapted = run_answer_builder(
@@ -3975,41 +4343,285 @@ def component_test():
         question=question,
     )
 
+    assert adapted["engine_decision"] == DECISION_CONDITIONAL, (
+        "V6.0-27 Component Test：Engine Decision 应为 CONDITIONAL"
+    )
+
+    assert adapted["decision"] == ANSWER_CONDITIONAL, (
+        "V6.0-27 Component Test：Builder Decision 应为 CONDITIONAL"
+    )
+
+    # --------------------------------------------------------
+    # Test 1：用户事实保持原意
+    # --------------------------------------------------------
+
+    facts = ensure_list(adapted.get("user_facts", []))
+
+    assert any(
+        "三次" in normalize_text(fact)
+        and "固定期限劳动合同" in normalize_text(fact)
+        for fact in facts
+    ), (
+        "V6.0-27 Component Test：用户事实“三次固定期限劳动合同”丢失"
+    )
+
+    print("✅ Test 1：用户事实“三次固定期限劳动合同”保持原意")
+
+    # --------------------------------------------------------
+    # Test 2：Fact → Condition Numeric Threshold Mapping
+    # --------------------------------------------------------
+
+    mappings = ensure_list(
+        adapted.get("fact_condition_mappings", [])
+    )
+
+    three_mapping = next(
+        (
+            item for item in mappings
+            if isinstance(item, dict)
+            and normalize_text(item.get("condition", ""))
+            == "连续订立二次固定期限劳动合同"
+        ),
+        None,
+    )
+
+    assert three_mapping is not None, (
+        "V6.0-27 Component Test：缺少“三次→二次”数量门槛映射"
+    )
+
+    assert normalize_text(
+        three_mapping.get("status", "")
+    ).upper() == "SATISFIED", (
+        "V6.0-27 Component Test：三次→二次数量门槛必须为 SATISFIED"
+    )
+
+    assert normalize_text(
+        three_mapping.get("mapping_type", "")
+    ) == "NUMERIC_THRESHOLD", (
+        "V6.0-27 Component Test：映射类型必须为 NUMERIC_THRESHOLD"
+    )
+
+    print(
+        "✅ Test 2：三次固定期限合同 → 连续订立二次固定期限劳动合同 = SATISFIED"
+    )
+
+    # --------------------------------------------------------
+    # Test 3：Mapping 不得越权证明其它条件
+    # --------------------------------------------------------
+
+    does_not_prove = ensure_list(
+        three_mapping.get("does_not_prove", [])
+    )
+
+    forbidden_proofs = {
+        "续订劳动合同",
+        "劳动者提出或者同意续订、订立劳动合同",
+        "不存在第三十九条规定情形",
+        "不存在第四十条第一项规定情形",
+        "不存在第四十条第二项规定情形",
+        "劳动者未提出订立固定期限劳动合同",
+    }
+
+    assert forbidden_proofs.issubset(
+        set(normalize_text(item) for item in does_not_prove)
+    ), (
+        "V6.0-27 Component Test：三次合同的 does_not_prove 信息不完整"
+    )
+
+    print("✅ Test 3：三次事实不得越权证明其它法律条件")
+
+    # --------------------------------------------------------
+    # Test 4：Required / Exclusion / Exception 分类
+    # --------------------------------------------------------
+
+    required_results = ensure_list(
+        adapted.get("required_condition_results", [])
+    )
+    exclusion_results = ensure_list(
+        adapted.get("exclusion_condition_results", [])
+    )
+    exception_results = ensure_list(
+        adapted.get("exception_results", [])
+    )
+
+    assert len(required_results) == 4, (
+        "V6.0-27 Component Test：Required Condition Results 应为 4"
+    )
+    assert len(exclusion_results) == 3, (
+        "V6.0-27 Component Test：Exclusion Condition Results 应为 3"
+    )
+    assert len(exception_results) == 1, (
+        "V6.0-27 Component Test：Exception Results 应为 1"
+    )
+
+    required_names = {
+        normalize_text(item.get("condition", ""))
+        for item in required_results
+        if isinstance(item, dict)
+    }
+    exclusion_names = {
+        normalize_text(item.get("condition", ""))
+        for item in exclusion_results
+        if isinstance(item, dict)
+    }
+    exception_names = {
+        normalize_text(item.get("condition", ""))
+        for item in exception_results
+        if isinstance(item, dict)
+    }
+
+    assert required_names.isdisjoint(exclusion_names), (
+        "V6.0-27 Component Test：Required / Exclusion 条件发生重复"
+    )
+    assert required_names.isdisjoint(exception_names), (
+        "V6.0-27 Component Test：Required / Exception 条件发生重复"
+    )
+    assert exclusion_names.isdisjoint(exception_names), (
+        "V6.0-27 Component Test：Exclusion / Exception 条件发生重复"
+    )
+
+    print("✅ Test 4：Required / Exclusion / Exception 分类正确")
+
+    # --------------------------------------------------------
+    # Test 5：三次事实只能满足数量门槛
+    # --------------------------------------------------------
+
+    satisfied = set(
+        normalize_text(item)
+        for item in ensure_list(
+            adapted.get("satisfied_conditions", [])
+        )
+    )
+
+    assert satisfied == {
+        "连续订立二次固定期限劳动合同",
+        "存在后续订立的劳动合同",
+    }, (
+        "V6.0-27 Component Test：当前事实下应满足数量门槛和后续合同存在条件"
+    )
+
+    print("✅ Test 5：当前事实仅自动满足数量门槛")
+
+    # --------------------------------------------------------
+    # Test 6：Required UNKNOWN 必须恰好为 2
+    # --------------------------------------------------------
+
+    unknown_conditions = ensure_list(
+        adapted.get("unknown_conditions", [])
+    )
+
+    unknown_names = {
+        _condition_text(item)
+        for item in unknown_conditions
+        if _condition_text(item)
+    }
+
+    assert unknown_names == {
+        "续订劳动合同",
+        "劳动者提出或者同意续订、订立劳动合同",
+    }, (
+        "V6.0-27 Component Test：Required UNKNOWN 条件集合错误"
+    )
+
+    print("✅ Test 6：Required UNKNOWN = 2，且只包含两个必备条件")
+
+    # --------------------------------------------------------
+    # Test 7：Exclusion / Exception 不得混入 unknown_conditions
+    # --------------------------------------------------------
+
+    forbidden_unknown_names = (
+        exclusion_names | exception_names
+    )
+
+    assert unknown_names.isdisjoint(forbidden_unknown_names), (
+        "V6.0-27 Component Test：Exclusion / Exception 被错误加入 unknown_conditions"
+    )
+
+    print("✅ Test 7：Exclusion / Exception 未混入普通 UNKNOWN")
+
+    # --------------------------------------------------------
+    # Test 8：Condition Dependency 不允许条件偷换
+    # --------------------------------------------------------
+
+    correct_answer = (
+        "公司连续签订三次固定期限劳动合同，已经达到连续订立二次固定期限劳动合同的数量门槛；"
+        "但仍需判断续订劳动合同以及劳动者提出或者同意续订、订立劳动合同等法定条件。"
+        "现有事实不能直接证明劳动者已经提出或者同意下一次订立劳动合同，也不能证明不存在法定排除情形。"
+    )
+
+    assert validate_fact_condition_mapping(
+        answer=correct_answer,
+        question=question,
+        decision=adapted,
+    ), (
+        "V6.0-27 Component Test：正确的 Fact → Condition 表达未通过验证"
+    )
+
+    wrong_answer_1 = (
+        "因为连续签订三次固定期限劳动合同，所以已经证明劳动者同意订立无固定期限劳动合同。"
+    )
+
+    assert not validate_fact_condition_mapping(
+        answer=wrong_answer_1,
+        question=question,
+        decision=adapted,
+    ), (
+        "V6.0-27 Component Test：错误的无固定期限合同条件偷换未被拦截"
+    )
+
+    wrong_answer_2 = (
+        "第三次合同是否存在仍然需要确认。"
+    )
+
+    assert not validate_fact_condition_mapping(
+        answer=wrong_answer_2,
+        question=question,
+        decision=adapted,
+    ), (
+        "V6.0-27 Component Test：错误的第三次合同存在性判断未被拦截"
+    )
+
+    print("✅ Test 8：Fact → Condition 条件偷换验证正确")
+
+    # --------------------------------------------------------
+    # Test 9：Rule Dependency 结构完整性
+    # --------------------------------------------------------
+
+    assert three_mapping.get("dependency") == (
+        "THREE_CONTRACTS_MEET_TWO_CONTRACT_THRESHOLD"
+    ), (
+        "V6.0-27 Component Test：Rule Dependency 标识错误"
+    )
+
+    assert normalize_text(
+        three_mapping.get("fact", "")
+    ) == "公司连续签订三次固定期限劳动合同", (
+        "V6.0-27 Component Test：Mapping fact 必须保持用户事实原意"
+    )
+
+    print("✅ Test 9：Rule Dependency 结构完整")
+
+    # --------------------------------------------------------
+    # Summary
+    # --------------------------------------------------------
+
     print()
     print("=" * 70)
     print("Component Test Result")
     print("=" * 70)
-
     print()
-    print(
-        f"Engine Decision："
-        f"{adapted['engine_decision']}"
-    )
-
-    print(
-        f"Builder Decision："
-        f"{adapted['decision']}"
-    )
-
-    print(
-        f"Rules："
-        f"{len(adapted['rules'])}"
-    )
-
-    print(
-        f"Facts："
-        f"{len(adapted['user_facts'])}"
-    )
-
-    print(
-        f"Unknown Conditions："
-        f"{len(adapted['unknown_conditions'])}"
-    )
-
+    print(f"Engine Decision：{adapted['engine_decision']}")
+    print(f"Builder Decision：{adapted['decision']}")
+    print(f"Rules：{len(adapted['rules'])}")
+    print(f"Facts：{len(adapted['user_facts'])}")
+    print(f"Required Conditions：{len(required_results)}")
+    print(f"Exclusion Conditions：{len(exclusion_results)}")
+    print(f"Exceptions：{len(exception_results)}")
+    print(f"Satisfied Conditions：{len(adapted['satisfied_conditions'])}")
+    print(f"Unknown Conditions：{len(unknown_conditions)}")
+    print(f"Fact Mappings：{len(mappings)}")
     print()
-    print(
-        "✅ Component Test 完成"
-    )
+    print("🎉 RAG V6.0-27 Component Test 全部通过")
 
     return adapted
 
@@ -4138,7 +4750,7 @@ def answer_question(
     # ========================================================
     # Step 5
     # ========================================================
-
+    
     answer = final_validation(
         answer=answer,
         question=question,
