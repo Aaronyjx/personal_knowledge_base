@@ -676,6 +676,22 @@ def build_rules_from_articles(
     articles: Any,
 ) -> List[Dict[str, Any]]:
     # 将 Retriever Articles 转换成 Rules。
+    #
+    # 注意：
+    # 这里负责的是：
+    #
+    # Retriever Articles
+    #       ↓
+    # normalize_rule()
+    #       ↓
+    # Normalized Rules
+    #
+    # 不负责：
+    # Decision Adapter
+    # Ollama
+    # Answer Builder
+    #
+    # 因此这里应该保持“纯 Rules 构建”职责。
 
     if articles is None:
         return []
@@ -693,7 +709,17 @@ def build_rules_from_articles(
     for article in articles:
         rule = normalize_rule(article)
 
-        law_name = rule.get("law_name", "")
+        # --------------------------------------------------------
+        # 防止 normalize_rule() 返回空结果
+        # --------------------------------------------------------
+
+        if not isinstance(rule, dict) or not rule:
+            continue
+
+        law_name = rule.get(
+            "law_name",
+            "",
+        )
 
         article_number = rule.get(
             "article_number",
@@ -704,6 +730,10 @@ def build_rules_from_articles(
             "rule_summary",
             "",
         )
+
+        # --------------------------------------------------------
+        # 去重
+        # --------------------------------------------------------
 
         key = (
             law_name,
@@ -719,7 +749,6 @@ def build_rules_from_articles(
         rules.append(rule)
 
     return rules
-
 
 # ============================================================
 # V6.0-27 Decision Engine Boundary
@@ -1220,39 +1249,95 @@ def adapt_decision_for_answer_builder(
         else:
             required_results.append(normalized_item)
 
-    adapted["condition_results"] = [
-        *required_results,
-        *exclusion_results,
-        *exception_results,
-    ]
+    # ============================================================
+    # Conditions
+    # ============================================================
+
+    adapted["condition_results"] = raw_condition_results
+
     adapted["required_condition_results"] = required_results
+
     adapted["exclusion_condition_results"] = exclusion_results
+
     adapted["exception_results"] = exception_results
 
-    # Builder 已经生成了这三个列表；这里再次按 Engine 原始结果
-    # 做确定性读取，确保没有旧字段残留。
+
+    # ============================================================
+    # Satisfied Conditions
+    # ============================================================
+
     adapted["satisfied_conditions"] = [
         item["condition"]
         for item in required_results
         if item["status"] == ANSWER_SATISFIED
     ]
 
+
+    # ============================================================
+    # Unsatisfied Conditions
+    # ============================================================
+
     adapted["unsatisfied_conditions"] = [
         item["condition"]
         for item in required_results
-        if item["status"] in {"NOT_SATISFIED", ANSWER_UNSATISFIED}
+        if item["status"] in {
+            "NOT_SATISFIED",
+            ANSWER_UNSATISFIED,
+        }
     ]
+
+
+    # ============================================================
+    # Required Unknown Conditions
+    #
+    # 注意：
+    # unknown_conditions 只表示 REQUIRED 条件中的 UNKNOWN。
+    # 不包含 EXCLUSION / EXCEPTION。
+    # ============================================================
 
     adapted["unknown_conditions"] = [
         {
             "condition": item["condition"],
-            **({"reason": normalize_text(item.get("reason", ""))}
-               if normalize_text(item.get("reason", "")) else {}),
+            **(
+                {"reason": item["reason"]}
+                if item.get("reason")
+                else {}
+            ),
         }
         for item in required_results
         if item["status"] == ANSWER_UNKNOWN
     ]
 
+
+    # ============================================================
+    # All Unknown Conditions
+    #
+    # 表示全部 8 个法律条件中的 UNKNOWN。
+    #
+    # REQUIRED    × 4
+    # EXCLUSION   × 3
+    # EXCEPTION   × 1
+    #
+    # 注意：
+    # 这里不能替代 unknown_conditions。
+    # ============================================================
+
+    adapted["all_unknown_conditions"] = [
+        {
+            "condition": item["condition"],
+            "condition_type": item.get(
+                "condition_type",
+                item.get("type", "REQUIRED"),
+            ),
+            **(
+                {"reason": item["reason"]}
+                if item.get("reason")
+                else {}
+            ),
+        }
+        for item in raw_condition_results
+        if item["status"] == ANSWER_UNKNOWN
+    ]
     adapted["engine_condition_results_count"] = len(
         get_field(decision, "condition_results", []) or []
     )
@@ -1301,6 +1386,26 @@ def merge_rules_into_decision(
         existing_rules
         + ensure_list(rules)
     )
+
+    print("\n" + "-" * 70)
+    print("DEBUG / all_rules")
+    print("-" * 70)
+    print("all_rules type:", type(all_rules))
+    print("all_rules count:", len(all_rules) if isinstance(all_rules, (list, tuple, dict)) else "N/A")
+    print("all_rules:", all_rules)
+
+    adapted_decision["rules"] = (
+        build_rules_from_articles(
+            all_rules
+        )
+    )
+
+    print("\n" + "-" * 70)
+    print("DEBUG / adapted_decision rules")
+    print("-" * 70)
+    print("rules type:", type(adapted_decision.get("rules")))
+    print("rules count:", len(adapted_decision.get("rules", [])))
+    print("rules:", adapted_decision.get("rules"))
 
     adapted_decision["rules"] = (
         build_rules_from_articles(
@@ -1532,8 +1637,12 @@ def run_decision_engine(
     facts = ensure_list(
         get_field(
             decision,
-            "facts",
-            [],
+            "explicit_facts",
+            get_field(
+                decision,
+                "facts",
+                [],
+            ),
         )
     )
 
@@ -2380,10 +2489,27 @@ def validate_answer_structure(
 # 用户事实验证
 # ============================================================
 
+# ============================================================
+# 用户事实验证
+# ============================================================
+
 def validate_user_facts(
     answer: str,
     decision: Dict[str, Any],
 ) -> bool:
+    """
+    V6.0-27：用户事实保真验证。
+
+    核心原则：
+
+    1. Ollama 不得修改用户已经确认的事实。
+    2. 用户事实中的合同次数必须保持一致。
+    3. “两次”不能被改写成“三次”。
+    4. “三次”不能被改写成“两次”。
+    5. “两次”问题不能被模型自行扩张成“三次合同已经签订”。
+    6. 法律规则中的“连续订立二次固定期限劳动合同”可以正常出现，
+       但不能被误当成新的用户事实。
+    """
 
     facts = ensure_list(
         decision.get(
@@ -2395,39 +2521,98 @@ def validate_user_facts(
     if not facts:
         return True
 
-    # 核心事实保护。
-    #
-    # 不要求所有 Fact 必须逐字出现，
-    # 因为自然语言表达允许合理改写。
-    #
-    # 但是“三次固定期限劳动合同”
-    # 属于当前 Demo 的核心事实，
-    # 必须进行专项检查。
-
     fact_text = "；".join(
         normalize_text(item)
         for item in facts
     )
 
-    if (
-        "三次" in fact_text
-        and
-        "固定期限劳动合同" in fact_text
-    ):
+    answer_text = normalize_text(answer)
 
-        if "三次" not in answer:
+    # ========================================================
+    # 两次固定期限劳动合同
+    # ========================================================
+
+    has_two_fact = (
+        "两次" in fact_text
+        and "固定期限劳动合同" in fact_text
+    ) or (
+        "二次" in fact_text
+        and "固定期限劳动合同" in fact_text
+    )
+
+    if has_two_fact:
+
+        # -----------------------------------------------
+        # 用户明确是“两次”，最终回答必须保留这一事实。
+        # -----------------------------------------------
+
+        if not (
+            "两次" in answer_text
+            or "二次" in answer_text
+        ):
             return False
 
-        wrong_patterns = [
+        # -----------------------------------------------
+        # 禁止将“两次”扩张成“三次”用户事实。
+        #
+        # 注意：
+        #
+        # 法律规则中的“连续订立二次固定期限劳动合同”
+        # 是允许出现的。
+        #
+        # 这里禁止的是明确把用户事实写成“三次”。
+        # -----------------------------------------------
+
+        wrong_three_fact_patterns = [
+            "公司连续签订三次固定期限劳动合同",
+            "公司连续订立三次固定期限劳动合同",
+            "公司已经连续签订三次固定期限劳动合同",
+            "公司已经连续订立三次固定期限劳动合同",
+            "用户连续签订三次固定期限劳动合同",
+            "用户连续订立三次固定期限劳动合同",
+            "已连续签订三次固定期限劳动合同",
+            "已连续订立三次固定期限劳动合同",
+            "已经连续签订三次固定期限劳动合同",
+            "已经连续订立三次固定期限劳动合同",
+        ]
+
+        for pattern in wrong_three_fact_patterns:
+
+            if pattern in answer_text:
+                return False
+
+    # ========================================================
+    # 三次固定期限劳动合同
+    # ========================================================
+
+    has_three_fact = (
+        "三次" in fact_text
+        and "固定期限劳动合同" in fact_text
+    )
+
+    if has_three_fact:
+
+        if "三次" not in answer_text:
+            return False
+
+        # -----------------------------------------------
+        # 禁止将“三次”用户事实改写成“二次”用户事实。
+        # -----------------------------------------------
+
+        wrong_two_fact_patterns = [
             "用户连续签订二次固定期限劳动合同",
             "用户连续订立二次固定期限劳动合同",
             "公司连续签订二次固定期限劳动合同",
             "公司连续订立二次固定期限劳动合同",
+            "用户事实是二次固定期限劳动合同",
+            "用户事实为二次固定期限劳动合同",
+            "用户实际签订二次固定期限劳动合同",
+            "公司实际签订二次固定期限劳动合同",
         ]
 
-        for pattern in wrong_patterns:
+        for pattern in wrong_two_fact_patterns:
 
-            if pattern in answer:
+            if pattern in answer_text:
                 return False
 
     return True
