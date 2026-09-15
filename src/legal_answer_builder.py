@@ -1384,7 +1384,7 @@ def build_structured_answer(
     )
 
     unknown_conditions = _status_names(
-        condition_results,
+        classified[REQUIRED],
         UNKNOWN,
     )
 
