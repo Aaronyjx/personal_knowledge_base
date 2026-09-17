@@ -134,14 +134,115 @@
 # 12. 保留 V6.0-21 的用户事实、CONDITIONAL、UNKNOWN、法律依据安全机制。
 #
 # ============================================================
+# 标准库
+# ============================================================
+
+import re
+from typing import Any, Dict, List
+
+# ============================================================
 # 项目内部模块
 # ============================================================
 
+from src.retriever import build_context
+
+from src.legal_common import (
+    ensure_list,
+    get_field,
+    get_first_field,
+    get_rule_value,
+    normalize_text,
+    unique_texts,
+)
+
+from src.legal_rule_builder import (
+    build_rules_from_articles,
+    prioritize_legal_rules,
+)
+
+from src.legal_decision_engine import (
+    make_decision,
+)
+
+from src.legal_decision_adapter import (
+    extract_engine_decision,
+    extract_condition_value,
+    extract_fact_text,
+    enrich_conditional_conditions,
+    _condition_text,
+    _condition_list_from_rule,
+    _condition_category_map,
+    build_fact_condition_mappings,
+    build_structured_conclusion,
+    merge_rules_into_decision,
+    format_rules_for_display,
+    build_structured_context,
+)
+
+
+from src.legal_deterministic_answer import (
+    build_deterministic_engine_state_block,
+    build_deterministic_notices,
+    replace_deterministic_notices,
+    build_deterministic_legal_basis,
+    build_deterministic_conclusion,
+    replace_deterministic_conclusion,
+    replace_deterministic_legal_basis,
+)
+
+
+from src.legal_answer_builder import (
+    adapt_decision_for_answer_builder as builder_adapt_decision,
+    build_plain_answer,
+    get_value,
+    safe_text,
+    SATISFIED,
+    UNKNOWN,
+    NOT_SATISFIED,
+)
+
+from src.legal_prompt import (
+    build_ollama_prompt,
+)
+
 from src.legal_llm import (
     OLLAMA_MODEL,
+    call_ollama,
+)
+
+from src.legal_validator import (
+    clean_answer,
+    validate_answer_structure,
+    validate_fact_condition_mapping,
+    validate_user_facts,
+    validate_decision_consistency,
+    validate_three_contract_fact,
+    validate_no_manufactured_unknown,
+    validate_legal_condition_invention,
+    validate_conditional_state,
+    validate_unknown_conditions,
+    validate_legal_basis,
+    validate_engine_condition_completeness,
+    validate_condition_categories,
+    final_validation,
+)
+
+from src.legal_fallback import (
+    build_fallback_answer,
+)
+
+from src.deterministic_user_facts import (
+    build_deterministic_user_facts,
+    inject_deterministic_user_facts,
+)
+
+from src.inject_deterministic_condition_analysis import (
+    inject_deterministic_condition_analysis,
 )
 
 from src.legal_pipeline import (
+    run_decision_engine,
+    run_answer_builder,
     answer_question,
 )
 
@@ -155,6 +256,57 @@ from src.legal_component_test import (
 # ============================================================
 
 RAG_VERSION = "V6.0-27"
+
+# ============================================================
+# Legal Decision Engine 状态
+# ============================================================
+
+DECISION_DEFINITE = "DEFINITE"
+
+DECISION_CONDITIONAL = "CONDITIONAL"
+
+DECISION_NOT_ESTABLISHED = "NOT_ESTABLISHED"
+
+
+VALID_ENGINE_DECISIONS = {
+    DECISION_DEFINITE,
+    DECISION_CONDITIONAL,
+    DECISION_NOT_ESTABLISHED,
+}
+
+
+# ============================================================
+# Legal Answer Builder 状态
+# ============================================================
+
+ANSWER_SATISFIED = "SATISFIED"
+
+ANSWER_UNSATISFIED = "UNSATISFIED"
+
+ANSWER_UNKNOWN = "UNKNOWN"
+
+ANSWER_CONDITIONAL = "CONDITIONAL"
+
+
+# ============================================================
+# 最终答案结构
+# ============================================================
+
+SECTION_CONCLUSION = "【结论】"
+
+SECTION_BASIS = "【法律依据】"
+
+SECTION_ANALYSIS = "【法律分析】"
+
+SECTION_NOTICE = "【需要注意】"
+
+
+REQUIRED_SECTIONS = [
+    SECTION_CONCLUSION,
+    SECTION_BASIS,
+    SECTION_ANALYSIS,
+    SECTION_NOTICE,
+]
 
 # ============================================================
 # V6.0-27 Decision Engine Boundary
