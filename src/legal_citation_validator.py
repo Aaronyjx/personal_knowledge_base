@@ -20,11 +20,14 @@ Legal Citation Validator
 import re
 from typing import Any, Dict, List
 
-from src.rag import (
-    build_rules_from_articles,
+from src.legal_common import (
     ensure_list,
     get_rule_value,
     normalize_text,
+)
+
+from src.legal_rule_builder import (
+    build_rules_from_articles,
 )
 
 
