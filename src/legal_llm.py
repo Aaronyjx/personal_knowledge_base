@@ -36,9 +36,24 @@ V6.0-27 模块化重构
 
     1. Ollama HTTP 调用
     2. Ollama Response 提取
-    3. Qwen Thinking 内容清理
-    4. Markdown 标题清理
+    3. Ollama Runtime 统一入口
+    4. LLM 输出基础结构检查
+
+Answer Sanitization 已独立拆分至：
+
+    src/legal_answer_sanitizer.py
+
+该模块负责：
+
+    1. Qwen Thinking 内容清理
+    2. Markdown 标题清理
+    3. 连续空行清理
+    4. 正式 Section 清理
     5. 重复 Section 清理
+
+Common Utils 已独立拆分至：
+
+    src/legal_common_utils.py
 
 本模块不负责：
 
@@ -51,6 +66,9 @@ V6.0-27 模块化重构
     7. Deterministic Conclusion
     8. Deterministic Legal Basis
     9. Deterministic Notices
+    10. Prompt 构建
+    11. Answer Sanitization
+    12. 通用文本规范化
 
 ============================================================
 重要架构原则
@@ -81,6 +99,10 @@ V6.0-27 模块化重构
 
 12. 法律 Validation 不属于本模块。
 
+13. Answer Sanitization 不属于本模块。
+
+14. 通用文本工具函数不属于本模块。
+
 ============================================================
 重构后的职责边界
 ============================================================
@@ -93,6 +115,10 @@ src/legal_prompt.py
     ↓
     Ollama Prompt Builder
 
+src/legal_answer_sanitizer.py
+    ↓
+    LLM Answer Sanitization
+
 src/legal_validation.py
     ↓
     Final Validation
@@ -104,6 +130,14 @@ src/legal_citation_validator.py
 src/legal_answer_builder.py
     ↓
     Deterministic Structured Answer
+
+src/legal_decision_engine.py
+    ↓
+    Legal Decision
+
+src/legal_common_utils.py
+    ↓
+    Common Text / Field Utilities
 
 ============================================================
 V6.0-27 设计目标
@@ -128,6 +162,10 @@ V6.0-27 设计目标
         ↓
         负责 Ollama Runtime
 
+    legal_answer_sanitizer.py
+        ↓
+        负责 LLM Answer Sanitization
+
 这样可以保证：
 
     Prompt 修改
@@ -135,6 +173,9 @@ V6.0-27 设计目标
 
     Ollama 模型修改
         不需要修改 Prompt
+
+    Sanitization 修改
+        不需要修改 LLM Runtime
 
     Validation 修改
         不需要修改 LLM Runtime
@@ -166,18 +207,29 @@ from __future__ import annotations
 
 
 # ============================================================
-# 标准库
-# ============================================================
-
-import re
-from typing import Any
-
-
-# ============================================================
 # 第三方库
 # ============================================================
 
 import requests
+
+
+# ============================================================
+# 本地模块
+# ============================================================
+#
+# Answer Sanitization 已经独立拆分。
+#
+# legal_llm.py 不重新实现：
+#
+#     clean_answer()
+#     remove_duplicate_sections()
+#
+# 只负责调用 Sanitizer。
+# ============================================================
+
+from src.legal_answer_sanitizer import (
+    clean_answer,
+)
 
 
 # ============================================================
@@ -225,9 +277,17 @@ RAG_VERSION = "V6.0-27"
 #
 # 注意：
 #
-# 本模块只负责识别和清理这些 Section。
+# 本模块只负责识别这些 Section 是否按照要求出现。
 #
-# 不负责判断 Section 内容是否正确。
+# 本模块不负责判断 Section 内容是否正确。
+#
+# 内容正确性属于：
+#
+#     Legal Decision Engine
+#     Answer Builder
+#     Legal Validation
+#     Citation Validator
+#
 # ============================================================
 
 REQUIRED_SECTIONS = [
@@ -239,46 +299,7 @@ REQUIRED_SECTIONS = [
 
 
 # ============================================================
-# 基础文本规范化
-# ============================================================
-
-def normalize_text(
-    text: Any,
-) -> str:
-    """
-    基础文本规范化。
-
-    这里只处理：
-
-        1. None
-        2. 非字符串对象
-        3. Windows 换行
-        4. Mac 旧式换行
-        5. 首尾空白
-
-    不进行任何法律语义处理。
-    """
-
-    if text is None:
-        return ""
-
-    text = str(text)
-
-    text = text.replace(
-        "\r\n",
-        "\n",
-    )
-
-    text = text.replace(
-        "\r",
-        "\n",
-    )
-
-    return text.strip()
-
-
-# ============================================================
-# Ollama
+# Ollama HTTP Runtime
 # ============================================================
 
 def call_ollama(
@@ -312,6 +333,32 @@ def call_ollama(
         response
           ↓
         clean_answer()
+          ↓
+        Answer
+
+    ========================================================
+    参数
+    ========================================================
+
+    prompt:
+        已经由 legal_prompt.py 构建完成的 Prompt。
+
+    model:
+        Ollama 模型名称。
+
+        默认：
+
+            qwen3:14b
+
+    ========================================================
+    返回
+    ========================================================
+
+    返回经过：
+
+        legal_answer_sanitizer.clean_answer()
+
+    清理后的字符串。
 
     ========================================================
     重要原则
@@ -324,9 +371,45 @@ def call_ollama(
         - 条件判断
         - 用户事实判断
         - 法律依据判断
+        - 法律结论生成
+        - 法律 Validation
 
     这些内容均属于其他模块职责。
     """
+
+    # ========================================================
+    # 参数基础检查
+    # ========================================================
+
+    if not isinstance(
+        prompt,
+        str,
+    ):
+        raise TypeError(
+            "prompt 必须是 str。"
+        )
+
+    if not prompt.strip():
+        raise ValueError(
+            "prompt 不能为空。"
+        )
+
+    if not isinstance(
+        model,
+        str,
+    ):
+        raise TypeError(
+            "model 必须是 str。"
+        )
+
+    if not model.strip():
+        raise ValueError(
+            "model 不能为空。"
+        )
+
+    # ========================================================
+    # Ollama Request Payload
+    # ========================================================
 
     payload = {
         "model": model,
@@ -338,288 +421,71 @@ def call_ollama(
         },
     }
 
+    # ========================================================
+    # HTTP Request
+    # ========================================================
+
     response = requests.post(
         OLLAMA_URL,
         json=payload,
         timeout=300,
     )
 
+    # ========================================================
+    # HTTP Error
+    # ========================================================
+
     response.raise_for_status()
 
+    # ========================================================
+    # JSON Response
+    # ========================================================
+
     data = response.json()
+
+    if not isinstance(
+        data,
+        dict,
+    ):
+        raise ValueError(
+            "Ollama 返回的数据不是 JSON object。"
+        )
+
+    # ========================================================
+    # Extract Response
+    # ========================================================
 
     answer = data.get(
         "response",
         "",
     )
 
+    if answer is None:
+        answer = ""
+
+    if not isinstance(
+        answer,
+        str,
+    ):
+        answer = str(answer)
+
+    # ========================================================
+    # Answer Sanitization
+    # ========================================================
+    #
+    # 注意：
+    #
+    # Sanitization 不属于 legal_llm.py。
+    #
+    # 这里仅调用：
+    #
+    #     legal_answer_sanitizer.clean_answer()
+    #
+    # ========================================================
+
     return clean_answer(
         answer
     )
-
-
-# ============================================================
-# 清理 Ollama 输出
-# ============================================================
-
-def clean_answer(
-    answer: str,
-) -> str:
-    """
-    清理 Ollama 输出。
-
-    ========================================================
-    清理内容
-    ========================================================
-
-    1. 空结果处理。
-
-    2. 基础文本规范化。
-
-    3. 删除 Qwen Thinking 内容。
-
-    4. 删除 Markdown 标题符号。
-
-    5. 压缩连续空行。
-
-    6. 如果已经生成正式 Section，
-       从第一个正式 Section 开始保留。
-
-    7. 删除重复 Section。
-
-    ========================================================
-    注意
-    ========================================================
-
-    本函数不进行法律判断。
-
-    例如：
-
-        UNKNOWN
-        SATISFIED
-        NOT_SATISFIED
-        DEFINITE
-        CONDITIONAL
-        NOT_ESTABLISHED
-
-    都不会在这里重新计算。
-
-    ========================================================
-    """
-
-    if not answer:
-        return ""
-
-    answer = normalize_text(
-        answer
-    )
-
-    # ========================================================
-    # 删除 Qwen Thinking 内容
-    # ========================================================
-
-    answer = re.sub(
-        r"<think>.*?</think>",
-        "",
-        answer,
-        flags=re.DOTALL,
-    )
-
-    answer = re.sub(
-        r"<think>.*",
-        "",
-        answer,
-        flags=re.DOTALL,
-    )
-
-    answer = answer.strip()
-
-    # ========================================================
-    # 删除 Markdown 标题符号
-    #
-    # 例如：
-    #
-    #     # 【结论】
-    #
-    # 转换为：
-    #
-    #     【结论】
-    #
-    # ========================================================
-
-    answer = re.sub(
-        r"(?m)^\s*#+\s*【",
-        "【",
-        answer,
-    )
-
-    # ========================================================
-    # 多个空行压缩
-    # ========================================================
-
-    answer = re.sub(
-        r"\n{3,}",
-        "\n\n",
-        answer,
-    )
-
-    # ========================================================
-    # 如果四段标题存在，
-    # 从第一个正式 Section 开始保留。
-    # ========================================================
-
-    positions = []
-
-    for section in REQUIRED_SECTIONS:
-
-        position = answer.find(
-            section
-        )
-
-        if position >= 0:
-
-            positions.append(
-                position
-            )
-
-    if positions:
-
-        start = min(
-            positions
-        )
-
-        answer = answer[
-            start:
-        ]
-
-    # ========================================================
-    # 删除重复标题
-    # ========================================================
-
-    answer = remove_duplicate_sections(
-        answer
-    )
-
-    return answer.strip()
-
-
-# ============================================================
-# 删除重复 Section
-# ============================================================
-
-def remove_duplicate_sections(
-    text: str,
-) -> str:
-    """
-    删除重复的最终回答 Section。
-
-    例如 Ollama 可能生成：
-
-        【结论】
-        ...
-
-        【法律依据】
-        ...
-
-        【法律分析】
-        ...
-
-        【结论】
-        ...
-
-    最终只保留第一次出现的：
-
-        【结论】
-
-    ========================================================
-    注意
-    ========================================================
-
-    这里仅进行文本结构清理。
-
-    不判断：
-
-        - 哪一个结论正确
-        - 哪一个法律依据正确
-        - 哪一个条件正确
-
-    ========================================================
-    """
-
-    if not text:
-        return ""
-
-    pattern = (
-        r"(【结论】|【法律依据】|【法律分析】|【需要注意】)"
-    )
-
-    parts = re.split(
-        pattern,
-        text,
-    )
-
-    if len(parts) < 3:
-        return text
-
-    result = []
-
-    seen = set()
-
-    i = 0
-
-    while i < len(parts):
-
-        part = parts[i]
-
-        if part in REQUIRED_SECTIONS:
-
-            section_name = part
-
-            body = ""
-
-            if i + 1 < len(parts):
-
-                body = parts[
-                    i + 1
-                ]
-
-            if section_name not in seen:
-
-                result.append(
-                    section_name
-                )
-
-                result.append(
-                    body
-                )
-
-                seen.add(
-                    section_name
-                )
-
-            i += 2
-
-        else:
-
-            # ------------------------------------------------
-            # 正式 Section 之前的普通文本，
-            # 只保留第一次出现的前置文本。
-            # ------------------------------------------------
-
-            if (
-                part.strip()
-                and not result
-            ):
-
-                result.append(
-                    part
-                )
-
-            i += 1
-
-    return "".join(
-        result
-    ).strip()
 
 
 # ============================================================
@@ -659,10 +525,39 @@ def validate_answer_structure(
 
         src/legal_citation_validator.py
 
+    本函数只检查：
+
+        1. answer 是否存在
+        2. 四个 Section 是否全部存在
+        3. 每个 Section 是否恰好出现一次
+        4. Section 顺序是否正确
+
+    不检查：
+
+        - 结论是否正确
+        - 法律依据是否正确
+        - 法律分析是否正确
+        - 用户事实是否正确
+        - Decision 是否正确
+        - Citation 是否正确
+        - UNKNOWN 是否被错误升级
+        - SATISFIED 是否被错误修改
+        - NOT_SATISFIED 是否被错误修改
+
     ========================================================
     """
 
-    if not answer:
+    # ========================================================
+    # 基础检查
+    # ========================================================
+
+    if not isinstance(
+        answer,
+        str,
+    ):
+        return False
+
+    if not answer.strip():
         return False
 
     # ========================================================
@@ -688,6 +583,22 @@ def validate_answer_structure(
         positions
     ):
 
+        return False
+
+    # ========================================================
+    # 防御性检查
+    # ========================================================
+    #
+    # find() 返回 -1 表示 Section 不存在。
+    #
+    # 理论上前面的 count() 已经保证全部存在，
+    # 这里保留防御性检查。
+    # ========================================================
+
+    if any(
+        position < 0
+        for position in positions
+    ):
         return False
 
     return True
@@ -728,6 +639,22 @@ def generate_answer(
 
     完成。
 
+    Answer Sanitization 不在本模块。
+
+    应由：
+
+        src/legal_answer_sanitizer.py
+
+    完成。
+
+    Final Validation 不在本模块。
+
+    应由：
+
+        src/legal_validation.py
+
+    完成。
+
     ========================================================
     """
 
@@ -740,16 +667,34 @@ def generate_answer(
 # ============================================================
 # 模块导出
 # ============================================================
+#
+# 只导出本模块真正负责的公开接口。
+#
+# 不再错误导出：
+#
+#     normalize_text
+#     clean_answer
+#     remove_duplicate_sections
+#
+# 其中：
+#
+#     normalize_text
+#         属于 legal_common_utils.py
+#
+#     clean_answer
+#         属于 legal_answer_sanitizer.py
+#
+#     remove_duplicate_sections
+#         属于 legal_answer_sanitizer.py
+#
+# ============================================================
 
 __all__ = [
     "RAG_VERSION",
     "OLLAMA_URL",
     "OLLAMA_MODEL",
     "REQUIRED_SECTIONS",
-    "normalize_text",
     "call_ollama",
-    "clean_answer",
-    "remove_duplicate_sections",
     "validate_answer_structure",
     "generate_answer",
 ]

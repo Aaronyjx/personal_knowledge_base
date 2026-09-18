@@ -507,6 +507,326 @@ def validate_user_facts(
             ):
                 return False
 
+    # ========================================================
+    # V6.0-17：禁止“用户事实区域”出现 Engine 未提供的新事实
+    #
+    # 上面的验证负责检查：
+    #
+    #     Engine 已知事实是否被最终答案保留
+    #
+    # 但仅检查“已知事实是否保留”还不够。
+    #
+    # 例如 Engine 只有：
+    #
+    #     公司连续签订三次固定期限劳动合同
+    #
+    # LLM 却输出：
+    #
+    #     1. 用户事实：
+    #     - 公司连续签订三次固定期限劳动合同
+    #     - 劳动者存在《劳动合同法》第三十九条规定的情形
+    #
+    # 第二条并不是 Engine 提供的用户事实，必须拒绝。
+    #
+    # 注意：
+    # 这里只检查明确的“用户事实”区域。
+    # 法律分析、条件状态、法律依据中的法律内容不受影响。
+    # ========================================================
+
+    def _extract_explicit_user_fact_items(text: str) -> List[str]:
+        if not text:
+            return []
+
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+
+        start_patterns = [
+            r"(?m)^\s*\d+\.\s*用户事实\s*：\s*$",
+            r"(?m)^\s*用户事实\s*：\s*$",
+            r"(?m)^\s*【用户事实】\s*$",
+        ]
+
+        start_match = None
+
+        for pattern in start_patterns:
+            match = re.search(pattern, normalized)
+            if match:
+                start_match = match
+                break
+
+        if not start_match:
+            return []
+
+        section = normalized[start_match.end():]
+
+        # 用户事实区域在下一个明确的顶层结构出现时结束。
+        end_patterns = [
+            # ------------------------------------------------
+            # Deterministic Fallback 的用户事实之后可能出现：
+            #
+            # 2. 已满足条件：
+            # 3. 不满足的必备条件：
+            # 4. 已触发排除条件：
+            # 5. 已触发例外条件：
+            # 6. 尚未确认条件：
+            # 7. 法律后果：
+            #
+            # 这些全部属于后续结构，不能继续视为用户事实。
+            # ------------------------------------------------
+            r"(?m)^\s*\d+\.\s*(?:已满足条件|不满足的必备条件|已触发排除条件|已触发例外条件|尚未确认条件|法律后果)\s*：",
+
+            # 条件状态及其兼容写法。
+            r"(?m)^\s*\d+\.\s*(?:条件状态|当前条件状态|法律分析|分析结果|判断结果)\s*：",
+            r"(?m)^\s*(?:条件状态|当前条件状态|法律分析|分析结果|判断结果)\s*：",
+
+            # 正式 Section。
+            r"(?m)^\s*【(?:法律依据|法律分析|需要注意|结论)】",
+            r"(?m)^\s*\d+\.\s*【(?:法律依据|法律分析|需要注意|结论)】",
+        ]
+
+        end_positions = []
+
+        for pattern in end_patterns:
+            match = re.search(pattern, section)
+            if match:
+                end_positions.append(match.start())
+
+        if end_positions:
+            section = section[:min(end_positions)]
+
+        items: List[str] = []
+
+        for line in section.split("\n"):
+            line = line.strip()
+
+            if not line:
+                continue
+
+            # 标准格式：
+            #
+            # - 公司连续签订三次固定期限劳动合同
+            #
+            if line.startswith("-"):
+                value = line[1:].strip()
+
+                if value:
+                    items.append(value)
+
+                continue
+
+            # 兼容项目符号。
+            if line.startswith("•"):
+                value = line[1:].strip()
+
+                if value:
+                    items.append(value)
+
+                continue
+
+            # 兼容：
+            #
+            # 1. 公司连续签订三次固定期限劳动合同
+            #
+            numbered = re.match(
+                r"^\d+[\.、]\s*(.+)$",
+                line,
+            )
+
+            if numbered:
+                value = numbered.group(1).strip()
+
+                if (
+                    value
+                    and "用户事实" not in value
+                ):
+                    items.append(value)
+
+        return items
+
+    def _normalize_fact_for_match(
+        value: str,
+    ) -> str:
+        value = normalize_text(value)
+
+        value = (
+            value
+            .replace(
+                "《中华人民共和国劳动合同法》",
+                "《劳动合同法》",
+            )
+            .replace(
+                "中华人民共和国劳动合同法",
+                "劳动合同法",
+            )
+            .replace(
+                "劳动合同法第三十九条",
+                "劳动合同法》第三十九条",
+            )
+        )
+
+        return value.strip(
+            " ：:，,。；;"
+        )
+
+    def _fact_matches_engine_fact(
+        answer_fact: str,
+        engine_fact: str,
+    ) -> bool:
+        answer_fact = _normalize_fact_for_match(
+            answer_fact
+        )
+
+        engine_fact = _normalize_fact_for_match(
+            engine_fact
+        )
+
+        if not answer_fact or not engine_fact:
+            return False
+
+        # ----------------------------------------------------
+        # 1. 标准化后完全一致
+        # ----------------------------------------------------
+        if answer_fact == engine_fact:
+            return True
+
+        # ----------------------------------------------------
+        # 2. 三次固定期限劳动合同事实
+        # ----------------------------------------------------
+        if (
+            "三次" in engine_fact
+            and "固定期限劳动合同" in engine_fact
+        ):
+            return (
+                "三次" in answer_fact
+                and "固定期限劳动合同" in answer_fact
+                and (
+                    "连续签订" in answer_fact
+                    or "连续订立" in answer_fact
+                    or "连续三次" in answer_fact
+                )
+            )
+
+        # ----------------------------------------------------
+        # 3. 两次固定期限劳动合同事实
+        # ----------------------------------------------------
+        if (
+            "固定期限劳动合同" in engine_fact
+            and (
+                "两次" in engine_fact
+                or "二次" in engine_fact
+            )
+        ):
+            has_two = (
+                "两次" in answer_fact
+                or "二次" in answer_fact
+            )
+
+            has_fixed_term = (
+                "固定期限劳动合同"
+                in answer_fact
+            )
+
+            has_continuous = (
+                "连续签订" in answer_fact
+                or "连续订立" in answer_fact
+                or "连续两次" in answer_fact
+                or "连续二次" in answer_fact
+            )
+
+            return (
+                has_two
+                and has_fixed_term
+                and has_continuous
+            )
+
+        # ----------------------------------------------------
+        # 4. 续订 / 续签劳动合同事实
+        # ----------------------------------------------------
+        if (
+            "续订劳动合同" in engine_fact
+            or "续签劳动合同" in engine_fact
+            or "明确续订劳动合同" in engine_fact
+            or "明确续签劳动合同" in engine_fact
+        ):
+            return (
+                "劳动合同" in answer_fact
+                and (
+                    "续签" in answer_fact
+                    or "续订" in answer_fact
+                )
+            )
+
+        # ----------------------------------------------------
+        # 5. 第39条用户事实
+        # ----------------------------------------------------
+        if (
+            "第三十九条" in engine_fact
+            and "情形" in engine_fact
+        ):
+            return (
+                "第三十九条" in answer_fact
+                and "情形" in answer_fact
+                and (
+                    "存在" in answer_fact
+                    or "有" in answer_fact
+                    or "符合" in answer_fact
+                    or "属于" in answer_fact
+                )
+            )
+
+        return False
+
+    explicit_user_fact_items = (
+        _extract_explicit_user_fact_items(answer)
+    )
+
+    if explicit_user_fact_items:
+        engine_fact_values: List[str] = []
+
+        for engine_fact in facts:
+
+            if isinstance(engine_fact, dict):
+                engine_fact = (
+                    engine_fact.get("fact")
+                    or engine_fact.get("text")
+                    or ""
+                )
+
+            engine_fact = normalize_text(
+                engine_fact
+            )
+
+            if engine_fact:
+                engine_fact_values.append(
+                    engine_fact
+                )
+
+        # ----------------------------------------------------
+        # 用户事实区域中的每一条事实，
+        # 必须能够对应到 Engine 已确认的用户事实。
+        #
+        # 因此：
+        #
+        # Engine:
+        #   三次固定期限劳动合同
+        #
+        # Answer:
+        #   三次固定期限劳动合同
+        #   + 第39条情形
+        #
+        # 第二条无法匹配 Engine，
+        # validate_user_facts() 必须返回 False。
+        # ----------------------------------------------------
+        for answer_fact in explicit_user_fact_items:
+
+            if not any(
+                _fact_matches_engine_fact(
+                    answer_fact=answer_fact,
+                    engine_fact=engine_fact,
+                )
+                for engine_fact in engine_fact_values
+            ):
+                return False
+
     has_three_fact = any(
         (
             "三次" in normalize_text(fact)
