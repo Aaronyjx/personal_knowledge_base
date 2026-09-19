@@ -62,7 +62,6 @@ from src.legal_common import (
     get_first_field,
     get_rule_value,
     normalize_text,
-    unique_texts,
 )
 
 from src.legal_rule_builder import (
@@ -271,69 +270,156 @@ def _condition_category_map(
     return mapping
 
 def build_fact_condition_mappings(
-    question: str,
-    user_facts: List[str],
+    decision: Any,
     rules: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     """
-    V6.0-27：Fact-to-Condition Mapping + Rule Dependency。
+    V6.1：Fact-to-Condition Mapping + Rule Dependency。
 
     核心原则：
 
-    1. 用户事实“连续签订三次固定期限劳动合同”可以确定已经达到
+    1. Legal Decision Engine 是唯一的事实抽取与法律条件判断来源。
+    2. Adapter 不再重新扫描 question。
+    3. Adapter 直接读取 DecisionResult.contract_sequence。
+    4. “连续签订三次固定期限劳动合同”只能用于证明
        “连续订立二次固定期限劳动合同”的数量门槛。
-    2. 该事实不能自动证明未来还会发生“续订劳动合同”。
-    3. 不能把“劳动者提出或者同意续订、订立劳动合同”改写成
-       “劳动者提出或者同意订立无固定期限劳动合同”。
-    4. 排除条件和例外条件必须保持 UNKNOWN，除非用户提供相应事实。
-    5. Mapping 只记录事实覆盖关系，不直接修改 Decision Engine 状态。
+    5. 不得由“三次合同”推导：
+           - 续订劳动合同
+           - 劳动者提出或者同意续订、订立劳动合同
+           - 不存在第三十九条情形
+           - 不存在第四十条第一、二项情形
+           - 劳动者未提出订立固定期限劳动合同
+    6. Mapping 只记录事实覆盖关系，不修改 Decision Engine 状态。
 
-    这里明确区分三个概念：
+    V6.1 数据流：
 
-        已签订三次固定期限合同
-                ↓
-        已达到连续订立二次的数量门槛
-                ↓
-        下一次是否发生续订 / 订立劳动合同
-                ↓
-        第十四条其它条件是否满足
-                ↓
-        法律后果
-
-    因此，“三次”绝不能被错误映射为“劳动者已经同意下一次续订”。
+        Question
+            ↓
+        extract_legal_facts()
+            ↓
+        LegalFacts
+            ↓
+        DecisionResult
+            ↓
+        Adapter
+            ↓
+        Fact → Condition Mapping
     """
-    question_text = normalize_text(question)
-    facts = unique_texts(user_facts)
-    normalized_rules = build_rules_from_articles(rules)
+
+    # --------------------------------------------------------
+    # 1. 从 DecisionResult 获取 ContractSequence
+    #
+    # Decision Engine 已经完成唯一一次事实抽取。
+    #
+    # Adapter 禁止再次扫描 question。
+    # --------------------------------------------------------
+
+    contract_sequence = get_field(
+        decision,
+        "contract_sequence",
+        None,
+    )
+
+    if contract_sequence is None:
+        return []
+
+    # --------------------------------------------------------
+    # 2. 读取结构化合同序列
+    # --------------------------------------------------------
+
+    count = get_field(
+        contract_sequence,
+        "count",
+        None,
+    )
+
+    term_type = normalize_text(
+        get_field(
+            contract_sequence,
+            "term_type",
+            "",
+        )
+    ).lower()
+
+    continuous = get_field(
+        contract_sequence,
+        "continuous",
+        None,
+    )
+
+    # --------------------------------------------------------
+    # 3. 数量门槛判断
+    #
+    # 注意：
+    #
+    # 三次固定期限合同
+    #     ↓
+    # 达到“连续订立二次固定期限劳动合同”的数量门槛
+    #
+    # 但不代表：
+    #
+    #     续订已经发生
+    #     劳动者已经同意下一次续订
+    #     排除条件不存在
+    #     例外条件不存在
+    # --------------------------------------------------------
+
+    try:
+        contract_count = int(count)
+    except (TypeError, ValueError):
+        return []
 
     has_three_contract_fact = (
-        "三次" in question_text
-        and "固定期限劳动合同" in question_text
-    ) or any(
-        "三次" in normalize_text(fact)
-        and "固定期限劳动合同" in normalize_text(fact)
-        for fact in facts
+        contract_count >= 3
+        and term_type == "fixed"
+        and continuous is True
     )
 
     if not has_three_contract_fact:
         return []
 
-    target_condition = "连续订立二次固定期限劳动合同"
+    # --------------------------------------------------------
+    # 4. 从 Structured Rules 中确认目标条件确实存在。
+    #
+    # Adapter 不自行创造 Condition。
+    # --------------------------------------------------------
+
+    normalized_rules = build_rules_from_articles(
+        rules
+    )
+
+    target_condition = (
+        "连续订立二次固定期限劳动合同"
+    )
 
     for rule in normalized_rules:
+
         conditions = ensure_list(
-            get_rule_value(rule, "conditions", "required_conditions")
+            get_rule_value(
+                rule,
+                "conditions",
+                "required_conditions",
+            )
         )
+
         for item in conditions:
-            if _condition_text(item) == target_condition:
-                return [{
+
+            if _condition_text(item) != target_condition:
+                continue
+
+            return [
+                {
                     "fact": "公司连续签订三次固定期限劳动合同",
                     "condition": target_condition,
                     "status": "SATISFIED",
                     "mapping_type": "NUMERIC_THRESHOLD",
-                    "dependency": "THREE_CONTRACTS_MEET_TWO_CONTRACT_THRESHOLD",
+                    "dependency": (
+                        "THREE_CONTRACTS_MEET_TWO_CONTRACT_THRESHOLD"
+                    ),
                     "reason": (
-                        "用户明确说明连续签订三次固定期限劳动合同；三次已经达到连续订立二次固定期限劳动合同的最低数量门槛。"
+                        "Decision Engine 的 LegalFacts 已明确记录"
+                        "连续三次固定期限劳动合同；三次已经达到"
+                        "连续订立二次固定期限劳动合同的最低数量门槛。"
                     ),
                     "does_not_prove": [
                         "续订劳动合同",
@@ -343,10 +429,10 @@ def build_fact_condition_mappings(
                         "不存在第四十条第二项规定情形",
                         "劳动者未提出订立固定期限劳动合同",
                     ],
-                }]
+                }
+            ]
 
     return []
-
 def build_structured_conclusion(
     decision: Any,
     condition_results: List[Dict[str, Any]],
@@ -570,57 +656,6 @@ def merge_rules_into_decision(
     print(
         "rules:",
         adapted_decision.get("rules"),
-    )
-
-    return adapted_decision
-    # Decision Engine 可能只返回 selected rules。
-    #
-    # Answer Builder 需要完整法律依据。
-    #
-    # 因此：
-    #
-    #     Decision Rules
-    #           +
-    #     Retriever Rules
-    #
-    # 进行合并。
-
-    existing_rules = ensure_list(
-        adapted_decision.get(
-            "rules",
-            [],
-        )
-    )
-
-    all_rules = (
-        existing_rules
-        + ensure_list(rules)
-    )
-
-    print("\n" + "-" * 70)
-    print("DEBUG / all_rules")
-    print("-" * 70)
-    print("all_rules type:", type(all_rules))
-    print("all_rules count:", len(all_rules) if isinstance(all_rules, (list, tuple, dict)) else "N/A")
-    print("all_rules:", all_rules)
-
-    adapted_decision["rules"] = (
-        build_rules_from_articles(
-            all_rules
-        )
-    )
-
-    print("\n" + "-" * 70)
-    print("DEBUG / adapted_decision rules")
-    print("-" * 70)
-    print("rules type:", type(adapted_decision.get("rules")))
-    print("rules count:", len(adapted_decision.get("rules", [])))
-    print("rules:", adapted_decision.get("rules"))
-
-    adapted_decision["rules"] = (
-        build_rules_from_articles(
-            all_rules
-        )
     )
 
     return adapted_decision

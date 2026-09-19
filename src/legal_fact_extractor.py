@@ -15,7 +15,12 @@ Legal Fact Extractor
 结构化事实
       ├── explicit_facts
       ├── contract_sequence
-      └── completed renewal
+      ├── completed_renewal
+      ├── worker_agreement
+      ├── article_39
+      ├── article_40_1
+      ├── article_40_2
+      └── fixed_term_exception
       ↓
 Legal Decision Engine
 
@@ -28,6 +33,7 @@ Legal Decision Engine
     1. 从用户问题中提取明确表达的事实
     2. 识别合同序列
     3. 识别已经完成的续订/续签事实
+    4. 将已经提取的事实组装成 LegalFacts
 
 本模块不负责：
 
@@ -58,12 +64,32 @@ V6.1 第一刀
     - 第四十条第二项
     - 第39条 + 第40条组合否定事实
 
-重要：
+============================================================
+V6.1 第二阶段
+============================================================
 
-    本版本只是事实提取层拆分。
+新增：
 
-    暂时不改变 Legal Decision Engine 的
-    match_condition() 逻辑。
+    extract_legal_facts()
+
+负责将现有事实提取结果统一组装成：
+
+    LegalFacts
+
+注意：
+
+    extract_legal_facts()
+    不重新实现事实识别规则。
+
+而是复用：
+
+    extract_explicit_facts()
+    extract_contract_sequence()
+    has_completed_renewal()
+
+从而保证：
+
+    “事实识别规则只有一套”。
 
 ============================================================
 事实提取原则
@@ -79,6 +105,24 @@ V6.1 第一刀
 
 5. 组合否定必须拆解成三个明确事实。
 
+6. Fact 层只表达事实：
+
+       True
+           明确存在 / 明确发生
+
+       False
+           明确不存在 / 明确未发生
+
+       None
+           用户没有明确说明
+
+7. Fact 层不直接使用：
+
+       SATISFIED
+       NOT_SATISFIED
+       UNKNOWN
+
+   这些属于 Legal Decision Engine 的 Condition 层语义。
 ============================================================
 """
 
@@ -87,7 +131,10 @@ from __future__ import annotations
 from typing import Any, List, Optional
 
 from src.legal_common import normalize_text
-from src.legal_fact_models import ContractSequence
+from src.legal_fact_models import (
+    ContractSequence,
+    LegalFacts,
+)
 
 
 # ============================================================
@@ -372,6 +419,31 @@ def extract_explicit_facts(
 
         "劳动者也明确提出续订",
         "劳动者也明确提出续签",
+
+        "员工同意续订",
+        "员工同意续签",
+        "员工同意订立劳动合同",
+
+        "员工提出续订",
+        "员工提出续签",
+        "员工提出订立劳动合同",
+
+        "员工明确同意续订",
+        "员工明确同意续签",
+
+        "员工也同意续订",
+        "员工也同意续签",
+        "员工也同意订立劳动合同",
+
+        "员工也提出续订",
+        "员工也提出续签",
+        "员工也提出订立劳动合同",
+
+        "员工也明确同意续订",
+        "员工也明确同意续签",
+
+        "员工明确提出续订",
+        "员工明确提出续签",
     ]
 
     if contains_any(
@@ -714,3 +786,221 @@ def extract_contract_sequence(
         )
 
     return None
+
+
+# ============================================================
+# Legal Facts Extraction
+# ============================================================
+
+def extract_legal_facts(
+    question: str,
+) -> LegalFacts:
+    """
+    V6.1 第二阶段：
+
+    将现有事实提取结果统一组装成 LegalFacts。
+
+    --------------------------------------------------------
+    重要设计原则
+    --------------------------------------------------------
+
+    本函数不重新实现事实识别规则。
+
+    事实识别仍然由：
+
+        extract_explicit_facts()
+        extract_contract_sequence()
+        has_completed_renewal()
+
+    完成。
+
+    本函数只负责：
+
+        “把已经识别出来的事实放入 LegalFacts”。
+
+    这样可以保证整个系统只有一套事实识别规则。
+
+    --------------------------------------------------------
+    Fact 层三态语义
+    --------------------------------------------------------
+
+        True
+            明确存在 / 明确发生
+
+        False
+            明确不存在 / 明确未发生
+
+        None
+            未明确说明
+
+    --------------------------------------------------------
+    与 Condition 层的关系
+    --------------------------------------------------------
+
+    例如：
+
+        article_39 = True
+
+    只表示：
+
+        用户明确说存在第三十九条情形。
+
+    Legal Decision Engine 后续才负责将其转换成：
+
+        EXCLUSION
+        NOT_SATISFIED
+
+    同理：
+
+        article_39 = False
+
+    后续转换为：
+
+        EXCLUSION
+        SATISFIED
+
+    而：
+
+        article_39 = None
+
+    后续转换为：
+
+        EXCLUSION
+        UNKNOWN
+    """
+
+    # --------------------------------------------------------
+    # 第一步：复用已经验证过的事实提取逻辑
+    # --------------------------------------------------------
+
+    explicit_facts = extract_explicit_facts(
+        question
+    )
+
+    contract_sequence = extract_contract_sequence(
+        question
+    )
+
+    completed_renewal = (
+        True
+        if has_completed_renewal(question)
+        else None
+    )
+
+    # --------------------------------------------------------
+    # 第二步：从 explicit_facts 读取结构化事实
+    #
+    # 注意：
+    #
+    # 不重新扫描 question。
+    #
+    # 这样可以保证：
+    #
+    #   extract_explicit_facts()
+    #           ↓
+    #       唯一事实来源
+    # --------------------------------------------------------
+
+    worker_agreement = None
+
+    if (
+        "劳动者明确提出或者同意续订、订立劳动合同"
+        in explicit_facts
+    ):
+
+        worker_agreement = True
+
+    # --------------------------------------------------------
+    # Article 39
+    # --------------------------------------------------------
+
+    article_39 = None
+
+    if (
+        "劳动者存在《劳动合同法》第三十九条规定的情形"
+        in explicit_facts
+    ):
+
+        article_39 = True
+
+    elif (
+        "劳动者不存在《劳动合同法》第三十九条规定的情形"
+        in explicit_facts
+    ):
+
+        article_39 = False
+
+    # --------------------------------------------------------
+    # Article 40(1)
+    # --------------------------------------------------------
+
+    article_40_1 = None
+
+    if (
+        "劳动者存在《劳动合同法》第四十条第一项规定的情形"
+        in explicit_facts
+    ):
+
+        article_40_1 = True
+
+    elif (
+        "劳动者不存在《劳动合同法》第四十条第一项规定的情形"
+        in explicit_facts
+    ):
+
+        article_40_1 = False
+
+    # --------------------------------------------------------
+    # Article 40(2)
+    # --------------------------------------------------------
+
+    article_40_2 = None
+
+    if (
+        "劳动者存在《劳动合同法》第四十条第二项规定的情形"
+        in explicit_facts
+    ):
+
+        article_40_2 = True
+
+    elif (
+        "劳动者不存在《劳动合同法》第四十条第二项规定的情形"
+        in explicit_facts
+    ):
+
+        article_40_2 = False
+
+    # --------------------------------------------------------
+    # Fixed-Term Exception
+    # --------------------------------------------------------
+
+    fixed_term_exception = None
+
+    if (
+        "劳动者提出订立固定期限劳动合同"
+        in explicit_facts
+    ):
+
+        fixed_term_exception = True
+
+    elif (
+        "劳动者没有提出订立固定期限劳动合同"
+        in explicit_facts
+    ):
+
+        fixed_term_exception = False
+
+    # --------------------------------------------------------
+    # 构造 LegalFacts
+    # --------------------------------------------------------
+
+    return LegalFacts(
+        explicit_facts=explicit_facts,
+        contract_sequence=contract_sequence,
+        completed_renewal=completed_renewal,
+        worker_agreement=worker_agreement,
+        article_39=article_39,
+        article_40_1=article_40_1,
+        article_40_2=article_40_2,
+        fixed_term_exception=fixed_term_exception,
+    )

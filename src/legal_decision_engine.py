@@ -12,6 +12,10 @@ Legal Retriever
       ↓
 Structured Articles
       ↓
+Legal Fact Extractor
+      ↓
+LegalFacts
+      ↓
 Legal Decision Engine
       ↓
 DecisionResult
@@ -23,7 +27,7 @@ Ollama
 Final Legal Answer
 
 ============================================================
-V6.0-16 核心原则
+V6.0-16 / V6.1 第一阶段核心原则
 ============================================================
 
 1. Decision Engine 只负责法律条件判断。
@@ -32,10 +36,21 @@ V6.0-16 核心原则
        - 生成最终法律答案
        - 调用 Ollama
        - 组织最终自然语言回复
+       - 从用户问题中重新扫描事实
 
-3. Article 14 的核心条件必须保持结构化。
+3. 用户自然语言事实由：
 
-4. 用户事实：
+       legal_fact_extractor.py
+
+   负责提取为：
+
+       LegalFacts
+
+4. Decision Engine 只消费 LegalFacts。
+
+5. Article 14 的核心条件必须保持结构化。
+
+6. 用户事实：
 
        公司连续签订三次固定期限劳动合同
 
@@ -53,34 +68,34 @@ V6.0-16 核心原则
        - 不存在第40条第二项情形
        - 劳动者没有提出订立固定期限劳动合同
 
-5. “准备续订”“计划续订”“打算续订”
+7. “准备续订”“计划续订”“打算续订”
    不能等同于“已经续订”。
 
-6. “劳动者同意续订”
+8. “劳动者同意续订”
    可以证明劳动者同意，
    但不能自动证明已经完成续订。
 
-7. UNKNOWN 不能自动升级为 SATISFIED。
+9. UNKNOWN 不能自动升级为 SATISFIED。
 
-8. REQUIRED 条件存在 NOT_SATISFIED：
+10. REQUIRED 条件存在 NOT_SATISFIED：
        → NOT_ESTABLISHED
 
-9. EXCLUSION 条件存在 NOT_SATISFIED：
+11. EXCLUSION 条件存在 NOT_SATISFIED：
        → 表示排除条件已经触发
        → NOT_ESTABLISHED
 
-10. EXCEPTION 条件存在 NOT_SATISFIED：
+12. EXCEPTION 条件存在 NOT_SATISFIED：
        → 表示例外已经触发
        → NOT_ESTABLISHED
 
-11. 没有 NOT_SATISFIED，
+13. 没有 NOT_SATISFIED，
     但存在 UNKNOWN：
        → CONDITIONAL
 
-12. 全部条件 SATISFIED：
+14. 全部条件 SATISFIED：
        → DEFINITE
 
-13. 组合否定事实必须保持完整语义：
+15. 组合否定事实必须保持完整语义：
 
        不存在劳动合同法第三十九条和
        第四十条第一项、第二项规定的情形
@@ -93,8 +108,72 @@ V6.0-16 核心原则
 
    不能因为三个法律条件在一句话中被合并表达，
    就将其中两个或者三个条件错误标记为 UNKNOWN。
+
+============================================================
+V6.1 第一阶段 Fact → Condition 迁移
+============================================================
+
+事实层：
+
+    用户问题
+       ↓
+    extract_legal_facts()
+       ↓
+    LegalFacts
+
+判定层：
+
+    LegalFacts
+       ↓
+    match_condition()
+       ↓
+    ConditionResult
+
+其中：
+
+    REQUIRED 1
+        → facts.contract_sequence
+
+    REQUIRED 2
+        → facts.contract_sequence
+        → facts.completed_renewal
+
+    REQUIRED 3
+        → facts.completed_renewal
+
+    REQUIRED 4
+        → facts.worker_agreement
+
+    Article 39
+        → facts.article_39
+
+    Article 40(1)
+        → facts.article_40_1
+
+    Article 40(2)
+        → facts.article_40_2
+
+    EXCEPTION
+        → facts.fixed_term_exception
+
+注意：
+
+    LegalFacts 中：
+
+        True
+            = 用户明确陈述事实存在
+
+        False
+            = 用户明确陈述事实不存在
+
+        None
+            = 用户没有明确陈述
+
+    None 不得被 Engine 自动升级为 True。
+
 ============================================================
 """
+
 
 from __future__ import annotations
 
@@ -102,13 +181,15 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.legal_common import normalize_text
-from src.legal_fact_models import ContractSequence
+
+from src.legal_fact_models import (
+    ContractSequence,
+    LegalFacts,
+)
+
 from src.legal_fact_extractor import (
-    contains_any,
     unique_texts,
-    extract_contract_sequence,
-    extract_explicit_facts,
-    has_completed_renewal,
+    extract_legal_facts,
 )
 
 
@@ -211,12 +292,10 @@ COMBINED_ARTICLE_39_40_NEGATIVE_PATTERNS = [
     "不存在《劳动合同法》第三十九条和第四十条第一项及第二项规定的情形",
     "不存在劳动合同法第三十九条、第四十条第一项、第二项规定的情形",
     "不存在《劳动合同法》第三十九条、第四十条第一项、第二项规定的情形",
-
     "没有劳动合同法第三十九条和第四十条第一项、第二项规定的情形",
     "没有《劳动合同法》第三十九条和第四十条第一项、第二项规定的情形",
     "没有劳动合同法第三十九条和第四十条第一项及第二项规定的情形",
     "没有《劳动合同法》第三十九条和第四十条第一项及第二项规定的情形",
-
     "不具有劳动合同法第三十九条和第四十条第一项、第二项规定的情形",
     "不具有《劳动合同法》第三十九条和第四十条第一项、第二项规定的情形",
     "不具有劳动合同法第三十九条和第四十条第一项及第二项规定的情形",
@@ -700,24 +779,50 @@ def build_rule_dependency(
 # ============================================================
 
 def match_condition(
-    question: str,
+    facts: LegalFacts,
     condition: str,
     condition_type: str,
-    contract_sequence: Optional[
-        ContractSequence
-    ],
 ) -> ConditionResult:
     """
     对单项法律条件进行判断。
-    """
 
-    text = normalize_text(question)
+    V6.1 第一阶段：
+
+        本函数不再接收 question。
+
+        本函数不再：
+            - normalize_text(question)
+            - contains_any(...)
+            - has_completed_renewal(...)
+            - 自己扫描自然语言模式
+
+        本函数只消费 LegalFacts。
+
+    Fact Layer：
+
+        LegalFacts
+            ↓
+        Condition Mapping
+            ↓
+        ConditionResult
+
+    注意：
+
+        LegalFacts 中的 None 必须保持 UNKNOWN。
+
+        Engine 不得因为上下文或者推测，
+        将 None 自动升级为 SATISFIED。
+    """
 
     # ========================================================
     # REQUIRED 1
     # ========================================================
 
     if condition == "连续订立二次固定期限劳动合同":
+
+        contract_sequence = (
+            facts.contract_sequence
+        )
 
         if (
             contract_sequence is not None
@@ -752,6 +857,10 @@ def match_condition(
 
     if condition == "存在后续订立的劳动合同":
 
+        contract_sequence = (
+            facts.contract_sequence
+        )
+
         if (
             contract_sequence is not None
             and contract_sequence.count >= 3
@@ -769,35 +878,7 @@ def match_condition(
                 condition_type=REQUIRED,
             )
 
-        explicit_later_patterns = [
-            "存在后续劳动合同",
-            "存在后续订立的劳动合同",
-            "后来订立劳动合同",
-            "后来签订劳动合同",
-            "之后订立劳动合同",
-            "之后签订劳动合同",
-            "后来续订劳动合同",
-            "后来续签劳动合同",
-            "之后续订劳动合同",
-            "之后续签劳动合同",
-        ]
-
-        if contains_any(
-            text,
-            explicit_later_patterns,
-        ):
-
-            return ConditionResult(
-                condition=condition,
-                status=SATISFIED,
-                reason=(
-                    "用户明确陈述存在后续订立"
-                    "或者后续劳动合同事实。"
-                ),
-                condition_type=REQUIRED,
-            )
-
-        if has_completed_renewal(text):
+        if facts.completed_renewal is True:
 
             return ConditionResult(
                 condition=condition,
@@ -825,7 +906,7 @@ def match_condition(
 
     if condition == "续订劳动合同":
 
-        if has_completed_renewal(text):
+        if facts.completed_renewal is True:
 
             return ConditionResult(
                 condition=condition,
@@ -838,36 +919,9 @@ def match_condition(
                 condition_type=REQUIRED,
             )
 
-        planned_patterns = [
-            "准备续订",
-            "准备续签",
-            "计划续订",
-            "计划续签",
-            "打算续订",
-            "打算续签",
-            "拟续订",
-            "拟续签",
-            "准备与劳动者续订",
-            "准备与劳动者续签",
-            "计划与劳动者续订",
-            "计划与劳动者续签",
-        ]
-
-        if contains_any(
-            text,
-            planned_patterns,
-        ):
-
-            return ConditionResult(
-                condition=condition,
-                status=UNKNOWN,
-                reason=(
-                    "用户仅陈述准备、计划、打算或者拟续订，"
-                    "这些表述属于未来计划，"
-                    "不能证明续订已经完成。"
-                ),
-                condition_type=REQUIRED,
-            )
+        contract_sequence = (
+            facts.contract_sequence
+        )
 
         if (
             contract_sequence is not None
@@ -904,54 +958,7 @@ def match_condition(
         == "劳动者提出或者同意续订、订立劳动合同"
     ):
 
-        worker_agreement_patterns = [
-            "劳动者同意续订",
-            "劳动者同意续签",
-            "劳动者同意订立劳动合同",
-            "劳动者明确同意续订",
-            "劳动者明确同意续签",
-
-            # ----------------------------------------------------
-            # V6.0-16 FIX：
-            # 支持“劳动者也同意……”的自然语言表达。
-            #
-            # 例如：
-            #
-            #   劳动者也同意续订
-            #   劳动者也同意续签
-            #   劳动者也同意订立劳动合同
-            #
-            # “也”属于语气副词，不改变法律事实语义。
-            # ----------------------------------------------------
-
-            "劳动者也同意续订",
-            "劳动者也同意续签",
-            "劳动者也同意订立劳动合同",
-            "劳动者也明确同意续订",
-            "劳动者也明确同意续签",
-
-            "劳动者提出续订",
-            "劳动者提出续签",
-            "劳动者提出订立劳动合同",
-            "劳动者明确提出续订",
-            "劳动者明确提出续签",
-
-            # ----------------------------------------------------
-            # V6.0-16 FIX：
-            # 支持“劳动者也提出……”的自然语言表达。
-            # ----------------------------------------------------
-
-            "劳动者也提出续订",
-            "劳动者也提出续签",
-            "劳动者也提出订立劳动合同",
-            "劳动者也明确提出续订",
-            "劳动者也明确提出续签",
-        ]
-
-        if contains_any(
-            text,
-            worker_agreement_patterns,
-        ):
+        if facts.worker_agreement is True:
 
             return ConditionResult(
                 condition=condition,
@@ -962,6 +969,10 @@ def match_condition(
                 ),
                 condition_type=REQUIRED,
             )
+
+        contract_sequence = (
+            facts.contract_sequence
+        )
 
         if (
             contract_sequence is not None
@@ -999,64 +1010,19 @@ def match_condition(
         == "劳动者存在《劳动合同法》第三十九条规定的情形"
     ):
 
-        negative_patterns = [
-            "不存在劳动合同法第三十九条规定的情形",
-            "不存在《劳动合同法》第三十九条规定的情形",
-            "没有劳动合同法第三十九条规定的情形",
-            "没有《劳动合同法》第三十九条规定的情形",
-            "不具有劳动合同法第三十九条规定的情形",
-            "不具有《劳动合同法》第三十九条规定的情形",
-            "不符合劳动合同法第三十九条",
-            "不符合《劳动合同法》第三十九条",
-        ]
-
-        positive_patterns = [
-            "存在劳动合同法第三十九条规定的情形",
-            "存在《劳动合同法》第三十九条规定的情形",
-            "符合劳动合同法第三十九条",
-            "符合《劳动合同法》第三十九条",
-            "属于劳动合同法第三十九条规定的情形",
-            "属于《劳动合同法》第三十九条规定的情形",
-        ]
-
         # ----------------------------------------------------
-        # V6.0-16：
-        # 必须先检查组合否定。
+        # False：
         #
-        # 例如：
+        # 用户明确陈述不存在 Article 39 情形。
         #
-        #   不存在劳动合同法第三十九条和
-        #   第四十条第一项、第二项规定的情形
+        # 对 EXCLUSION 而言：
         #
-        # 这一句话同时证明 Article 39 不存在。
+        # 不存在排除情形
+        #     → 条件满足
+        #     → SATISFIED
         # ----------------------------------------------------
 
-        if contains_any(
-            text,
-            COMBINED_ARTICLE_39_40_NEGATIVE_PATTERNS,
-        ):
-
-            return ConditionResult(
-                condition=condition,
-                status=SATISFIED,
-                reason=(
-                    "用户明确陈述不存在"
-                    "《劳动合同法》第三十九条以及"
-                    "《劳动合同法》第四十条第一项、第二项"
-                    "规定的情形，"
-                    "因此第三十九条排除条件未被触发。"
-                ),
-                condition_type=EXCLUSION,
-            )
-
-        # ----------------------------------------------------
-        # 单独否定
-        # ----------------------------------------------------
-
-        if contains_any(
-            text,
-            negative_patterns,
-        ):
+        if facts.article_39 is False:
 
             return ConditionResult(
                 condition=condition,
@@ -1070,13 +1036,18 @@ def match_condition(
             )
 
         # ----------------------------------------------------
-        # 正面触发
+        # True：
+        #
+        # 用户明确陈述存在 Article 39 情形。
+        #
+        # 对 EXCLUSION 而言：
+        #
+        # 排除情形成立
+        #     → NOT_SATISFIED
+        #     → 触发 NOT_ESTABLISHED
         # ----------------------------------------------------
 
-        if contains_any(
-            text,
-            positive_patterns,
-        ):
+        if facts.article_39 is True:
 
             return ConditionResult(
                 condition=condition,
@@ -1088,6 +1059,14 @@ def match_condition(
                 ),
                 condition_type=EXCLUSION,
             )
+
+        # ----------------------------------------------------
+        # None：
+        #
+        # 用户没有明确说明。
+        #
+        # 不得推测。
+        # ----------------------------------------------------
 
         return ConditionResult(
             condition=condition,
@@ -1109,57 +1088,7 @@ def match_condition(
         == "劳动者存在《劳动合同法》第四十条第一项规定的情形"
     ):
 
-        negative_patterns = [
-            "不存在劳动合同法第四十条第一项规定的情形",
-            "不存在《劳动合同法》第四十条第一项规定的情形",
-            "没有劳动合同法第四十条第一项规定的情形",
-            "没有《劳动合同法》第四十条第一项规定的情形",
-            "不具有劳动合同法第四十条第一项规定的情形",
-            "不具有《劳动合同法》第四十条第一项规定的情形",
-            "不符合劳动合同法第四十条第一项",
-            "不符合《劳动合同法》第四十条第一项",
-        ]
-
-        positive_patterns = [
-            "存在劳动合同法第四十条第一项规定的情形",
-            "存在《劳动合同法》第四十条第一项规定的情形",
-            "符合劳动合同法第四十条第一项",
-            "符合《劳动合同法》第四十条第一项",
-            "属于劳动合同法第四十条第一项规定的情形",
-            "属于《劳动合同法》第四十条第一项规定的情形",
-        ]
-
-        # ----------------------------------------------------
-        # V6.0-16：
-        # 组合否定同时证明 Article 40(1) 不存在。
-        # ----------------------------------------------------
-
-        if contains_any(
-            text,
-            COMBINED_ARTICLE_39_40_NEGATIVE_PATTERNS,
-        ):
-
-            return ConditionResult(
-                condition=condition,
-                status=SATISFIED,
-                reason=(
-                    "用户明确陈述不存在"
-                    "《劳动合同法》第三十九条以及"
-                    "《劳动合同法》第四十条第一项、第二项"
-                    "规定的情形，"
-                    "因此第四十条第一项排除条件未被触发。"
-                ),
-                condition_type=EXCLUSION,
-            )
-
-        # ----------------------------------------------------
-        # 单独否定
-        # ----------------------------------------------------
-
-        if contains_any(
-            text,
-            negative_patterns,
-        ):
+        if facts.article_40_1 is False:
 
             return ConditionResult(
                 condition=condition,
@@ -1172,14 +1101,7 @@ def match_condition(
                 condition_type=EXCLUSION,
             )
 
-        # ----------------------------------------------------
-        # 正面触发
-        # ----------------------------------------------------
-
-        if contains_any(
-            text,
-            positive_patterns,
-        ):
+        if facts.article_40_1 is True:
 
             return ConditionResult(
                 condition=condition,
@@ -1212,57 +1134,7 @@ def match_condition(
         == "劳动者存在《劳动合同法》第四十条第二项规定的情形"
     ):
 
-        negative_patterns = [
-            "不存在劳动合同法第四十条第二项规定的情形",
-            "不存在《劳动合同法》第四十条第二项规定的情形",
-            "没有劳动合同法第四十条第二项规定的情形",
-            "没有《劳动合同法》第四十条第二项规定的情形",
-            "不具有劳动合同法第四十条第二项规定的情形",
-            "不具有《劳动合同法》第四十条第二项规定的情形",
-            "不符合劳动合同法第四十条第二项",
-            "不符合《劳动合同法》第四十条第二项",
-        ]
-
-        positive_patterns = [
-            "存在劳动合同法第四十条第二项规定的情形",
-            "存在《劳动合同法》第四十条第二项规定的情形",
-            "符合劳动合同法第四十条第二项",
-            "符合《劳动合同法》第四十条第二项",
-            "属于劳动合同法第四十条第二项规定的情形",
-            "属于《劳动合同法》第四十条第二项规定的情形",
-        ]
-
-        # ----------------------------------------------------
-        # V6.0-16：
-        # 组合否定同时证明 Article 40(2) 不存在。
-        # ----------------------------------------------------
-
-        if contains_any(
-            text,
-            COMBINED_ARTICLE_39_40_NEGATIVE_PATTERNS,
-        ):
-
-            return ConditionResult(
-                condition=condition,
-                status=SATISFIED,
-                reason=(
-                    "用户明确陈述不存在"
-                    "《劳动合同法》第三十九条以及"
-                    "《劳动合同法》第四十条第一项、第二项"
-                    "规定的情形，"
-                    "因此第四十条第二项排除条件未被触发。"
-                ),
-                condition_type=EXCLUSION,
-            )
-
-        # ----------------------------------------------------
-        # 单独否定
-        # ----------------------------------------------------
-
-        if contains_any(
-            text,
-            negative_patterns,
-        ):
+        if facts.article_40_2 is False:
 
             return ConditionResult(
                 condition=condition,
@@ -1275,14 +1147,7 @@ def match_condition(
                 condition_type=EXCLUSION,
             )
 
-        # ----------------------------------------------------
-        # 正面触发
-        # ----------------------------------------------------
-
-        if contains_any(
-            text,
-            positive_patterns,
-        ):
+        if facts.article_40_2 is True:
 
             return ConditionResult(
                 condition=condition,
@@ -1314,55 +1179,15 @@ def match_condition(
         == "劳动者提出订立固定期限劳动合同"
     ):
 
-        positive_patterns = [
-            "劳动者提出订立固定期限劳动合同",
-            "劳动者提出签订固定期限劳动合同",
-            "劳动者要求订立固定期限劳动合同",
-            "劳动者要求签订固定期限劳动合同",
-            "劳动者主动提出订立固定期限劳动合同",
-            "劳动者主动提出签订固定期限劳动合同",
-        ]
-
-        negative_patterns = [
-            "劳动者没有提出订立固定期限劳动合同",
-            "劳动者未提出订立固定期限劳动合同",
-            "劳动者没有提出签订固定期限劳动合同",
-            "劳动者未提出签订固定期限劳动合同",
-            "劳动者并未提出订立固定期限劳动合同",
-            "劳动者并未提出签订固定期限劳动合同",
-            "劳动者没有要求订立固定期限劳动合同",
-            "劳动者未要求订立固定期限劳动合同",
-
-            # ----------------------------------------------------
-            # V6.0-16 FIX：
-            # 支持“劳动者也没有/也未……”的自然语言表达。
-            #
-            # 例如：
-            #
-            #   劳动者也没有提出订立固定期限劳动合同
-            #   劳动者也未提出订立固定期限劳动合同
-            #
-            # “也”不改变否定事实的法律语义。
-            # ----------------------------------------------------
-
-            "劳动者也没有提出订立固定期限劳动合同",
-            "劳动者也未提出订立固定期限劳动合同",
-            "劳动者也没有提出签订固定期限劳动合同",
-            "劳动者也未提出签订固定期限劳动合同",
-            "劳动者也并未提出订立固定期限劳动合同",
-            "劳动者也并未提出签订固定期限劳动合同",
-            "劳动者也没有要求订立固定期限劳动合同",
-            "劳动者也未要求订立固定期限劳动合同",
-        ]
-
         # ----------------------------------------------------
-        # 先检查否定事实。
+        # False：
+        #
+        # 用户明确陈述劳动者没有提出订立固定期限劳动合同。
+        #
+        # 因此例外没有触发。
         # ----------------------------------------------------
 
-        if contains_any(
-            text,
-            negative_patterns,
-        ):
+        if facts.fixed_term_exception is False:
 
             return ConditionResult(
                 condition=condition,
@@ -1375,10 +1200,15 @@ def match_condition(
                 condition_type=EXCEPTION,
             )
 
-        if contains_any(
-            text,
-            positive_patterns,
-        ):
+        # ----------------------------------------------------
+        # True：
+        #
+        # 用户明确陈述劳动者提出订立固定期限劳动合同。
+        #
+        # 例外条件触发。
+        # ----------------------------------------------------
+
+        if facts.fixed_term_exception is True:
 
             return ConditionResult(
                 condition=condition,
@@ -1390,6 +1220,12 @@ def match_condition(
                 ),
                 condition_type=EXCEPTION,
             )
+
+        # ----------------------------------------------------
+        # None：
+        #
+        # 用户没有明确说明。
+        # ----------------------------------------------------
 
         return ConditionResult(
             condition=condition,
@@ -1505,17 +1341,25 @@ def validate_condition_structure(
 # ============================================================
 
 def evaluate_rule(
-    question: str,
+    facts: LegalFacts,
     rule: Dict[str, Any],
-    contract_sequence: Optional[
-        ContractSequence
-    ],
 ) -> Tuple[
     str,
     List[ConditionResult],
 ]:
     """
     评估核心法律规则。
+
+    V6.1 第一阶段：
+
+        evaluate_rule() 不再接收 question。
+
+        evaluate_rule() 不再向 match_condition()
+        传递原始用户问题。
+
+        唯一事实输入：
+
+            LegalFacts
 
     V6.0-16：
 
@@ -1546,10 +1390,9 @@ def evaluate_rule(
     for condition in REQUIRED_CONDITIONS:
 
         result = match_condition(
-            question=question,
+            facts=facts,
             condition=condition,
             condition_type=REQUIRED,
-            contract_sequence=contract_sequence,
         )
 
         condition_results.append(
@@ -1563,10 +1406,9 @@ def evaluate_rule(
     for condition in EXCLUSION_CONDITIONS:
 
         result = match_condition(
-            question=question,
+            facts=facts,
             condition=condition,
             condition_type=EXCLUSION,
-            contract_sequence=contract_sequence,
         )
 
         condition_results.append(
@@ -1580,10 +1422,9 @@ def evaluate_rule(
     for condition in EXCEPTION_CONDITIONS:
 
         result = match_condition(
-            question=question,
+            facts=facts,
             condition=condition,
             condition_type=EXCEPTION,
-            contract_sequence=contract_sequence,
         )
 
         condition_results.append(
@@ -1943,44 +1784,98 @@ def make_decision(
     """
     对法律问题进行结构化判断。
 
+    V6.1 第一阶段：
+
+        用户问题
+            ↓
+        extract_legal_facts()
+            ↓
+        LegalFacts
+            ↓
+        evaluate_rule()
+            ↓
+        DecisionResult
+
     注意：
 
-        本函数不生成最终法律答案。
+        本函数只进行一次事实抽取。
+
+        Decision Engine 后续所有条件判断，
+        均从同一个 LegalFacts 对象读取。
+
+        不再让 match_condition()
+        重新扫描 question。
     """
 
     normalized_question = normalize_text(
         question
     )
 
-    explicit_facts = (
-        extract_explicit_facts(
-            normalized_question
-        )
+    # --------------------------------------------------------
+    # Fact Layer
+    # --------------------------------------------------------
+    #
+    # 唯一事实抽取入口。
+    #
+    # 后续 Engine 不再重新扫描 question。
+    # --------------------------------------------------------
+
+    facts = extract_legal_facts(
+        normalized_question
+    )
+
+    # --------------------------------------------------------
+    # 从 LegalFacts 获取兼容旧 DecisionResult
+    # 字段。
+    # --------------------------------------------------------
+
+    explicit_facts = list(
+        facts.explicit_facts
     )
 
     contract_sequence = (
-        extract_contract_sequence(
-            normalized_question
-        )
+        facts.contract_sequence
     )
+
+    # --------------------------------------------------------
+    # Core Rule
+    # --------------------------------------------------------
 
     core_rule = select_core_rule(
         retrieved_articles
     )
+
+    # --------------------------------------------------------
+    # Rule Dependency
+    # --------------------------------------------------------
 
     dependency = build_rule_dependency(
         normalized_question,
         contract_sequence,
     )
 
+    # --------------------------------------------------------
+    # Decision Engine
+    # --------------------------------------------------------
+    #
+    # 注意：
+    #
+    # evaluate_rule() 不再接收 question。
+    #
+    # 所有条件判断统一消费 LegalFacts。
+    # --------------------------------------------------------
+
     (
         decision,
         condition_results,
     ) = evaluate_rule(
-        normalized_question,
-        core_rule,
-        contract_sequence,
+        facts=facts,
+        rule=core_rule,
     )
+
+    # --------------------------------------------------------
+    # Explanation
+    # --------------------------------------------------------
 
     explanation = (
         build_decision_explanation(
@@ -1989,6 +1884,10 @@ def make_decision(
             contract_sequence,
         )
     )
+
+    # --------------------------------------------------------
+    # DecisionResult
+    # --------------------------------------------------------
 
     result = DecisionResult(
         decision=decision,
@@ -2002,6 +1901,10 @@ def make_decision(
         explanation=explanation,
         engine_version=ENGINE_VERSION,
     )
+
+    # --------------------------------------------------------
+    # Final Engine Validation
+    # --------------------------------------------------------
 
     validate_decision_result(
         result
@@ -2104,7 +2007,7 @@ def validate_decision_result(
     ):
 
         raise ValueError(
-            "Legal Decision Engine V6.0-16: "
+            "Legal Decision Engine "
             "NOT_SATISFIED 条件存在未正确分类的情况。"
         )
 
@@ -2118,7 +2021,7 @@ def validate_decision_result(
     ):
 
         raise ValueError(
-            "Legal Decision Engine V6.0-16: "
+            "Legal Decision Engine "
             "存在 UNKNOWN 条件时不能输出 DEFINITE。"
         )
 
@@ -2133,7 +2036,7 @@ def validate_decision_result(
     ):
 
         raise ValueError(
-            "Legal Decision Engine V6.0-16: "
+            "Legal Decision Engine "
             "存在未满足的 REQUIRED 条件时"
             "必须输出 NOT_ESTABLISHED。"
         )
@@ -2149,7 +2052,7 @@ def validate_decision_result(
     ):
 
         raise ValueError(
-            "Legal Decision Engine V6.0-16: "
+            "Legal Decision Engine "
             "存在已经触发的 EXCLUSION 条件时"
             "必须输出 NOT_ESTABLISHED。"
         )
@@ -2165,7 +2068,7 @@ def validate_decision_result(
     ):
 
         raise ValueError(
-            "Legal Decision Engine V6.0-16: "
+            "Legal Decision Engine "
             "存在已经触发的 EXCEPTION 条件时"
             "必须输出 NOT_ESTABLISHED。"
         )
@@ -2181,7 +2084,7 @@ def validate_decision_result(
     ):
 
         raise ValueError(
-            "Legal Decision Engine V6.0-16: "
+            "Legal Decision Engine "
             "存在 UNKNOWN 且不存在阻断性 NOT_SATISFIED "
             "时必须输出 CONDITIONAL。"
         )
@@ -2198,7 +2101,7 @@ def validate_decision_result(
     ):
 
         raise ValueError(
-            "Legal Decision Engine V6.0-16: "
+            "Legal Decision Engine "
             "全部条件满足时必须输出 DEFINITE。"
         )
 
@@ -2466,6 +2369,3 @@ def print_decision_result(
     )
 
     print("=" * 70)
-
-
-

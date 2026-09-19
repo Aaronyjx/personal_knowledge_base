@@ -455,13 +455,7 @@ def run_answer_builder(
     adapted[
         "fact_condition_mappings"
     ] = build_fact_condition_mappings(
-        question=question,
-        user_facts=ensure_list(
-            adapted.get(
-                "user_facts",
-                [],
-            )
-        ),
+        decision=decision,
         rules=ensure_list(
             adapted.get(
                 "rules",
@@ -1022,13 +1016,7 @@ def run_answer_builder(
     adapted[
         "fact_condition_mappings"
     ] = build_fact_condition_mappings(
-        question=question,
-        user_facts=ensure_list(
-            adapted.get(
-                "user_facts",
-                [],
-            )
-        ),
+        decision=decision,
         rules=ensure_list(
             adapted.get(
                 "rules",
