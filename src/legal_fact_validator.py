@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-RAG V6.0-27
+RAG V6.1
 
 Legal Fact Validator
 

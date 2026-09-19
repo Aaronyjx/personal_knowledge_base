@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-RAG V6.0-27
+RAG V6.1
 Legal Deterministic Answer Layer
 
 ============================================================
@@ -102,7 +102,7 @@ def build_deterministic_engine_state_block(
     decision: Dict[str, Any],
 ) -> str:
     """
-    RAG V6.0-27
+    RAG V6.1
     构建确定性的 Engine 状态块。
 
     核心原则：

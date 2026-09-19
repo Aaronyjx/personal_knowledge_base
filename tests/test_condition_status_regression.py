@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-RAG V6.0-27
+RAG V6.1
 Condition Status Fidelity Regression Test
 
 ============================================================
@@ -516,7 +516,7 @@ def main():
 
     print("=" * 70)
     print(
-        "RAG V6.0-27 "
+        "RAG V6.1 "
         "Condition Status Fidelity 回归测试"
     )
     print("=" * 70)
@@ -942,7 +942,7 @@ def main():
     print()
     print("=" * 70)
     print(
-        "RAG V6.0-27 "
+        "RAG V6.1 "
         "Condition Status Fidelity "
         "回归测试全部通过"
     )

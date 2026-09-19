@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-RAG V6.0-27
+RAG V6.1
 Legal Pipeline Orchestration
 
 ============================================================
@@ -176,7 +176,7 @@ from src.legal_deterministic_answer import (
 # Pipeline Version
 # ============================================================
 
-RAG_VERSION = "V6.0-27"
+RAG_VERSION = "V6.1"
 
 
 # ============================================================
@@ -190,7 +190,7 @@ def run_decision_engine(
 
     print()
     print("=" * 70)
-    print("Step 2 / Legal Decision Engine V6.0-14")
+    print("Step 2 / Legal Decision Engine V6.1")
     print("=" * 70)
 
     print()
@@ -266,7 +266,7 @@ def run_answer_builder(
     """
     执行 Legal Answer Builder。
 
-    RAG V6.0-27
+    RAG V6.1
 
     当前职责：
 
@@ -317,7 +317,7 @@ def run_answer_builder(
 
     print()
     print("=" * 70)
-    print("Step 3 / Legal Answer Builder V6.0-27")
+    print("Step 3 / Legal Answer Builder V6.1")
     print("=" * 70)
 
     # ========================================================
@@ -843,7 +843,7 @@ def run_answer_builder(
     """
     执行 Legal Answer Builder。
 
-    RAG V6.0-27
+    RAG V6.1
 
     当前职责：
 
@@ -894,7 +894,7 @@ def run_answer_builder(
 
     print()
     print("=" * 70)
-    print("Step 3 / Legal Answer Builder V6.0-27")
+    print("Step 3 / Legal Answer Builder V6.1")
     print("=" * 70)
 
     # ========================================================

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-RAG V6.0-27
+RAG V6.1
 
 Legal Condition Validator
 
@@ -84,6 +84,14 @@ from src.legal_answer_sanitizer import (
     REQUIRED_SECTIONS,
 )
 
+from src.legal_decision_engine import (
+    EXCEPTION,
+    EXCLUSION,
+    NOT_SATISFIED,
+    REQUIRED,
+    SATISFIED,
+    UNKNOWN,
+)
 
 # ============================================================
 # Legal Decision Engine 状态
@@ -604,21 +612,256 @@ def validate_unknown_conditions(
         )
     )
 
-    # --------------------------------------------------------
-    # Engine 没有 UNKNOWN 条件
-    # --------------------------------------------------------
-    #
-    # 如果 Decision Engine 没有任何 UNKNOWN 条件，
-    # 那么回答中自然不需要表达 UNKNOWN。
-    # --------------------------------------------------------
-
-    if not unknown:
-        return True
-
     answer_text = normalize_text(answer)
 
     if not answer_text:
         return False
+
+    # ========================================================
+    # NOT_SATISFIED EXCLUSION / EXCEPTION 反向语义保护
+    # ========================================================
+    #
+    # 即使当前 Decision 中不存在 UNKNOWN，
+    # 也必须验证：
+    #
+    #     EXCLUSION / EXCEPTION
+    #         +
+    #     NOT_SATISFIED
+    #
+    # 表示对应的排除情形 / 例外情形：
+    #
+    #     尚未触发
+    #
+    # 不能被 LLM 改写成：
+    #
+    #     无法确认
+    #     尚不确定
+    #     待核实
+    #
+    # 否则：
+    #
+    #     Engine = NOT_ESTABLISHED
+    #     EXCLUSION = NOT_SATISFIED
+    #
+    # 最终答案却会变成：
+    #
+    #     “当前无法确认是否存在该情形”
+    #
+    # 这实际上把已经确定“未触发”的排除 / 例外情形
+    # 降级成 UNKNOWN。
+    # ========================================================
+
+    condition_results = ensure_list(
+        decision.get(
+            "condition_results",
+            [],
+        )
+    )
+
+    reverse_status_patterns = [
+        "无法确认",
+        "不能确认",
+        "尚不能确认",
+        "尚未确认",
+        "尚不确定",
+        "尚不明确",
+        "无法判断",
+        "不能判断",
+        "待进一步确认",
+        "仍需确认",
+        "尚需确认",
+        "待核实",
+        "有待核实",
+        "需要进一步核实",
+        "需要进一步确认",
+    ]
+
+    for item in condition_results:
+
+        if not isinstance(item, dict):
+            continue
+
+        status = normalize_text(
+            item.get("status", "")
+        ).upper()
+
+        condition_type = normalize_text(
+            item.get("condition_type", "")
+        ).upper()
+
+        if status != NOT_SATISFIED:
+            continue
+
+        if condition_type not in {
+            EXCLUSION,
+            EXCEPTION,
+        }:
+            continue
+
+        condition = normalize_text(
+            item.get("condition", "")
+        )
+
+        if not condition:
+            continue
+
+        fragments = [
+            condition,
+            condition[:16],
+            condition[:12],
+            condition[:8],
+        ]
+
+        if "第三十九条" in condition:
+            fragments.extend([
+                "第三十九条",
+                "第三十九条规定的情形",
+            ])
+
+        if "第四十条第一项" in condition:
+            fragments.extend([
+                "第四十条第一项",
+                "第四十条第一项规定的情形",
+            ])
+
+        if "第四十条第二项" in condition:
+            fragments.extend([
+                "第四十条第二项",
+                "第四十条第二项规定的情形",
+            ])
+
+        if "固定期限劳动合同" in condition:
+            fragments.extend([
+                "提出订立固定期限劳动合同",
+            ])
+
+        fragments = [
+            normalize_text(fragment)
+            for fragment in fragments
+            if normalize_text(fragment)
+        ]
+
+        for fragment in fragments:
+
+            position = answer_text.find(fragment)
+
+            if position < 0:
+                continue
+
+            start = max(0, position - 120)
+            end = min(
+                len(answer_text),
+                position + len(fragment) + 120,
+            )
+
+            local_text = answer_text[start:end]
+
+            if any(
+                pattern in local_text
+                for pattern in reverse_status_patterns
+            ):
+                return False
+
+    # 例如：
+    #
+    #     Engine：
+    #         8 个条件全部 SATISFIED
+    #
+    #     LLM：
+    #         “还需要核实员工是否曾经口头提出过其他要求。”
+    #
+    # 该不确定事项不属于 Engine 的任何 UNKNOWN condition，
+    # 因此必须拒绝。
+    #
+    # 注意：
+    #
+    # 这里不能简单禁止所有“条件”“事实”等普通词语，
+    # 只拦截明确表达“未知 / 待确认 / 待核实 / 材料不足”
+    # 的 UNKNOWN 语义。
+    # ========================================================
+
+    if not unknown:
+
+        extra_unknown_patterns = [
+            "UNKNOWN",
+            "unknown",
+            "未知",
+            "未确定",
+            "尚未确定",
+            "未能确定",
+            "未确认",
+            "尚未确认",
+            "尚不明确",
+            "尚不确定",
+            "无法确认",
+            "不能确认",
+            "难以确认",
+            "不足以确认",
+            "无法判断",
+            "不能判断",
+            "难以判断",
+            "无法作出判断",
+            "不能作出判断",
+            "无法作出最终判断",
+            "不能作出最终判断",
+            "无法作出最终认定",
+            "不能作出最终认定",
+            "无法直接认定",
+            "不能直接认定",
+            "尚不能认定",
+            "尚不能确认",
+            "尚不能判断",
+            "目前不能确认",
+            "目前无法确认",
+            "目前无法判断",
+            "目前无法认定",
+            "当前不能确认",
+            "当前无法确认",
+            "当前无法判断",
+            "当前无法认定",
+            "现阶段无法",
+            "现阶段不能",
+            "现有材料不足",
+            "材料不足",
+            "事实不足",
+            "证据不足以确认",
+            "信息不足以确认",
+            "目前材料不足以",
+            "现有信息不足以",
+            "需要进一步确认",
+            "需要进一步核实",
+            "还需要进一步确认",
+            "还需进一步确认",
+            "还需要核实",
+            "仍需确认",
+            "仍需进一步确认",
+            "仍待确认",
+            "待进一步确认",
+            "待核实",
+            "有待核实",
+            "尚待核实",
+            "尚需确认",
+            "尚需进一步确认",
+            "需要补充事实",
+            "需要补充材料",
+            "需要补充信息",
+            "需补充事实",
+            "需补充材料",
+            "需补充信息",
+            "最终结论仍取决于",
+            "最终判断仍取决于",
+            "还需结合",
+            "仍需结合",
+            "需要结合其他",
+        ]
+
+        if any(
+            normalize_text(pattern) in answer_text
+            for pattern in extra_unknown_patterns
+        ):
+            return False
+
+        return True
 
     # ========================================================
     # 第一层：广义 UNKNOWN / 待确认语义标记
@@ -1565,16 +1808,163 @@ def validate_unknown_conditions(
             return True
 
     # ========================================================
-    # 最终：UNKNOWN 验证失败
+    # V6.1 Decision → Answer Boundary
+    #
+    # LLM 不得制造 Engine 没有提供的 UNKNOWN。
+    #
+    # Engine UNKNOWN 是唯一合法的未知条件来源。
+    #
+    # 允许：
+    #
+    #     Engine UNKNOWN
+    #         ↓
+    #     Answer 表达 UNKNOWN
+    #
+    # 禁止：
+    #
+    #     Engine 非 UNKNOWN
+    #         ↓
+    #     Answer 自行增加 UNKNOWN
+    #
     # ========================================================
-    #
-    # 说明：
-    #
-    # Engine 明确存在 UNKNOWN 条件，
-    # 但 Ollama 没有充分保留这些 UNKNOWN 条件的语义。
-    #
-    # 这种情况下必须 FAIL，
-    # 防止 Ollama 把“不确定”错误表达成确定结论。
+
+    engine_unknown_fragments = set()
+
+    for item in unknown:
+
+        if isinstance(item, dict):
+
+            condition = normalize_text(
+                item.get(
+                    "condition",
+                    item.get(
+                        "description",
+                        "",
+                    ),
+                )
+            )
+
+        else:
+
+            condition = normalize_text(item)
+
+        if not condition:
+            continue
+
+        engine_unknown_fragments.add(condition)
+
+        # 保留已有的条件片段匹配能力
+        engine_unknown_fragments.add(
+            condition[:16]
+        )
+        engine_unknown_fragments.add(
+            condition[:12]
+        )
+        engine_unknown_fragments.add(
+            condition[:8]
+        )
+
     # ========================================================
+    # 从最终答案中识别 UNKNOWN 表达。
+    #
+    # 注意：
+    #
+    # 这里只寻找“带有具体条件对象”的 UNKNOWN，
+    # 不把普通的“当前结论仍需结合事实”直接认定为
+    # 制造了一个新的法律条件。
+    # ========================================================
+
+    unknown_expression_patterns = [
+        "未知",
+        "未确定",
+        "尚未确定",
+        "未确认",
+        "尚未确认",
+        "尚不明确",
+        "尚不确定",
+        "无法确认",
+        "不能确认",
+        "无法判断",
+        "不能判断",
+        "待进一步确认",
+        "仍需确认",
+        "尚需确认",
+        "待核实",
+        "有待核实",
+    ]
+
+    answer_unknown_positions = []
+
+    for pattern in unknown_expression_patterns:
+
+        start = 0
+
+        while True:
+
+            position = answer_text.find(
+                pattern,
+                start,
+            )
+
+            if position < 0:
+                break
+
+            answer_unknown_positions.append(
+                (
+                    position,
+                    position + len(pattern),
+                )
+            )
+
+            start = position + len(pattern)
+
+    # ========================================================
+    # 每一个 UNKNOWN 表达都必须能关联到：
+    #
+    #     Engine UNKNOWN condition
+    #
+    # 否则视为 LLM 制造的新 UNKNOWN。
+    # ========================================================
+
+    for start, end in answer_unknown_positions:
+
+        context_start = max(
+            0,
+            start - 100,
+        )
+
+        context_end = min(
+            len(answer_text),
+            end + 100,
+        )
+
+        local_context = answer_text[
+            context_start:context_end
+        ]
+
+        # 如果附近能够找到 Engine UNKNOWN 条件，
+        # 则属于合法 UNKNOWN 表达。
+        matched_engine_unknown = False
+
+        for fragment in engine_unknown_fragments:
+
+            if not fragment:
+                continue
+
+            if fragment in local_context:
+
+                matched_engine_unknown = True
+                break
+
+        if matched_engine_unknown:
+            continue
+
+        # ====================================================
+        # 没有任何 Engine UNKNOWN 条件可以对应。
+        #
+        # 这是 LLM 自行制造 UNKNOWN。
+        # ====================================================
+
+        return False
 
     return False

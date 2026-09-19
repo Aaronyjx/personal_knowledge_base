@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-RAG V6.0-27
+RAG V6.1
 Deterministic Condition Analysis
 
 ============================================================
@@ -66,7 +66,7 @@ def build_deterministic_condition_analysis(
     """
     构造确定性的 ConditionResult 法律分析。
 
-    RAG V6.0-27
+    RAG V6.1
 
     重要原则：
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-RAG V6.0-27
+RAG V6.1
 Legal Fallback Layer
 
 ============================================================
@@ -250,7 +250,7 @@ def build_fallback_answer(
 
     print()
     print("=" * 70)
-    print("Fallback / Deterministic Legal Answer Builder V6.0-27")
+    print("Fallback / Deterministic Legal Answer Builder V6.1")
     print("=" * 70)
 
     question = normalize_text(
@@ -1091,7 +1091,7 @@ def build_fallback_answer(
 
             conclusion_lines = [
                 "根据已经确认的结构化法律条件，"
-                "Decision Engine 的结论为 DEFINITE。"
+                "当前属于确定性结论（DEFINITE）。"
             ]
 
     elif engine_decision == DECISION_NOT_ESTABLISHED:

@@ -197,7 +197,7 @@ from src.legal_fact_extractor import (
 # Version
 # ============================================================
 
-ENGINE_VERSION = "V6.0-16"
+ENGINE_VERSION = "V6.1"
 
 
 # ============================================================
@@ -482,8 +482,11 @@ class DecisionResult:
         """
         获取已经触发的 EXCLUSION 条件。
 
-        EXCLUSION 的 NOT_SATISFIED 并不是普通意义上的
-        “条件不满足”，而是表示排除情形已经成立。
+        EXCLUSION 的 SATISFIED 表示排除情形已经成立，
+        因此该条件已经触发。
+
+        EXCLUSION 的 NOT_SATISFIED 表示排除情形不存在，
+        因此该条件没有触发。
         """
 
         return [
@@ -491,7 +494,7 @@ class DecisionResult:
             for item in self.condition_results
             if (
                 item.condition_type == EXCLUSION
-                and item.status == NOT_SATISFIED
+                and item.status == SATISFIED
             )
         ]
 
@@ -502,8 +505,11 @@ class DecisionResult:
         """
         获取已经触发的 EXCEPTION 条件。
 
-        EXCEPTION 的 NOT_SATISFIED 表示例外情形成立，
-        因而阻却通常规则的适用。
+        EXCEPTION 的 SATISFIED 表示例外情形已经成立，
+        因此该例外条件已经触发。
+
+        EXCEPTION 的 NOT_SATISFIED 表示例外情形不存在，
+        因此该例外条件没有触发。
         """
 
         return [
@@ -511,7 +517,7 @@ class DecisionResult:
             for item in self.condition_results
             if (
                 item.condition_type == EXCEPTION
-                and item.status == NOT_SATISFIED
+                and item.status == SATISFIED
             )
         ]
 
@@ -1011,31 +1017,6 @@ def match_condition(
     ):
 
         # ----------------------------------------------------
-        # False：
-        #
-        # 用户明确陈述不存在 Article 39 情形。
-        #
-        # 对 EXCLUSION 而言：
-        #
-        # 不存在排除情形
-        #     → 条件满足
-        #     → SATISFIED
-        # ----------------------------------------------------
-
-        if facts.article_39 is False:
-
-            return ConditionResult(
-                condition=condition,
-                status=SATISFIED,
-                reason=(
-                    "用户明确陈述不存在"
-                    "《劳动合同法》第三十九条规定的情形，"
-                    "因此该排除条件未被触发。"
-                ),
-                condition_type=EXCLUSION,
-            )
-
-        # ----------------------------------------------------
         # True：
         #
         # 用户明确陈述存在 Article 39 情形。
@@ -1043,7 +1024,7 @@ def match_condition(
         # 对 EXCLUSION 而言：
         #
         # 排除情形成立
-        #     → NOT_SATISFIED
+        #     → 条件 SATISFIED
         #     → 触发 NOT_ESTABLISHED
         # ----------------------------------------------------
 
@@ -1051,11 +1032,36 @@ def match_condition(
 
             return ConditionResult(
                 condition=condition,
-                status=NOT_SATISFIED,
+                status=SATISFIED,
                 reason=(
                     "用户明确陈述存在"
                     "《劳动合同法》第三十九条规定的情形，"
                     "因此该排除条件已经触发。"
+                ),
+                condition_type=EXCLUSION,
+            )
+
+        # ----------------------------------------------------
+        # False：
+        #
+        # 用户明确陈述不存在 Article 39 情形。
+        #
+        # 对 EXCLUSION 而言：
+        #
+        # 排除情形不存在
+        #     → 条件 NOT_SATISFIED
+        #     → 不触发 NOT_ESTABLISHED
+        # ----------------------------------------------------
+
+        if facts.article_39 is False:
+
+            return ConditionResult(
+                condition=condition,
+                status=NOT_SATISFIED,
+                reason=(
+                    "用户明确陈述不存在"
+                    "《劳动合同法》第三十九条规定的情形，"
+                    "因此该排除条件未被触发。"
                 ),
                 condition_type=EXCLUSION,
             )
@@ -1088,28 +1094,47 @@ def match_condition(
         == "劳动者存在《劳动合同法》第四十条第一项规定的情形"
     ):
 
-        if facts.article_40_1 is False:
-
-            return ConditionResult(
-                condition=condition,
-                status=SATISFIED,
-                reason=(
-                    "用户明确陈述不存在"
-                    "《劳动合同法》第四十条第一项规定的情形，"
-                    "因此该排除条件未被触发。"
-                ),
-                condition_type=EXCLUSION,
-            )
+        # ----------------------------------------------------
+        # True：
+        #
+        # 用户明确陈述存在 Article 40(1) 情形。
+        #
+        # 排除情形成立
+        #     → SATISFIED
+        #     → 触发 NOT_ESTABLISHED
+        # ----------------------------------------------------
 
         if facts.article_40_1 is True:
 
             return ConditionResult(
                 condition=condition,
-                status=NOT_SATISFIED,
+                status=SATISFIED,
                 reason=(
                     "用户明确陈述存在"
                     "《劳动合同法》第四十条第一项规定的情形，"
                     "因此该排除条件已经触发。"
+                ),
+                condition_type=EXCLUSION,
+            )
+
+        # ----------------------------------------------------
+        # False：
+        #
+        # 用户明确陈述不存在 Article 40(1) 情形。
+        #
+        # 排除情形不存在
+        #     → NOT_SATISFIED
+        # ----------------------------------------------------
+
+        if facts.article_40_1 is False:
+
+            return ConditionResult(
+                condition=condition,
+                status=NOT_SATISFIED,
+                reason=(
+                    "用户明确陈述不存在"
+                    "《劳动合同法》第四十条第一项规定的情形，"
+                    "因此该排除条件未被触发。"
                 ),
                 condition_type=EXCLUSION,
             )
@@ -1134,28 +1159,47 @@ def match_condition(
         == "劳动者存在《劳动合同法》第四十条第二项规定的情形"
     ):
 
-        if facts.article_40_2 is False:
-
-            return ConditionResult(
-                condition=condition,
-                status=SATISFIED,
-                reason=(
-                    "用户明确陈述不存在"
-                    "《劳动合同法》第四十条第二项规定的情形，"
-                    "因此该排除条件未被触发。"
-                ),
-                condition_type=EXCLUSION,
-            )
+        # ----------------------------------------------------
+        # True：
+        #
+        # 用户明确陈述存在 Article 40(2) 情形。
+        #
+        # 排除情形成立
+        #     → SATISFIED
+        #     → 触发 NOT_ESTABLISHED
+        # ----------------------------------------------------
 
         if facts.article_40_2 is True:
 
             return ConditionResult(
                 condition=condition,
-                status=NOT_SATISFIED,
+                status=SATISFIED,
                 reason=(
                     "用户明确陈述存在"
                     "《劳动合同法》第四十条第二项规定的情形，"
                     "因此该排除条件已经触发。"
+                ),
+                condition_type=EXCLUSION,
+            )
+
+        # ----------------------------------------------------
+        # False：
+        #
+        # 用户明确陈述不存在 Article 40(2) 情形。
+        #
+        # 排除情形不存在
+        #     → NOT_SATISFIED
+        # ----------------------------------------------------
+
+        if facts.article_40_2 is False:
+
+            return ConditionResult(
+                condition=condition,
+                status=NOT_SATISFIED,
+                reason=(
+                    "用户明确陈述不存在"
+                    "《劳动合同法》第四十条第二项规定的情形，"
+                    "因此该排除条件未被触发。"
                 ),
                 condition_type=EXCLUSION,
             )
@@ -1180,43 +1224,46 @@ def match_condition(
     ):
 
         # ----------------------------------------------------
-        # False：
-        #
-        # 用户明确陈述劳动者没有提出订立固定期限劳动合同。
-        #
-        # 因此例外没有触发。
-        # ----------------------------------------------------
-
-        if facts.fixed_term_exception is False:
-
-            return ConditionResult(
-                condition=condition,
-                status=SATISFIED,
-                reason=(
-                    "用户明确陈述劳动者没有提出"
-                    "订立固定期限劳动合同，"
-                    "因此该例外条件未被触发。"
-                ),
-                condition_type=EXCEPTION,
-            )
-
-        # ----------------------------------------------------
         # True：
         #
         # 用户明确陈述劳动者提出订立固定期限劳动合同。
         #
-        # 例外条件触发。
+        # 例外条件成立
+        #     → SATISFIED
+        #     → 触发 NOT_ESTABLISHED
         # ----------------------------------------------------
 
         if facts.fixed_term_exception is True:
 
             return ConditionResult(
                 condition=condition,
-                status=NOT_SATISFIED,
+                status=SATISFIED,
                 reason=(
                     "用户明确陈述劳动者提出"
                     "订立固定期限劳动合同，"
                     "因此该例外条件已经触发。"
+                ),
+                condition_type=EXCEPTION,
+            )
+
+        # ----------------------------------------------------
+        # False：
+        #
+        # 用户明确陈述劳动者没有提出订立固定期限劳动合同。
+        #
+        # 例外条件不存在
+        #     → NOT_SATISFIED
+        # ----------------------------------------------------
+
+        if facts.fixed_term_exception is False:
+
+            return ConditionResult(
+                condition=condition,
+                status=NOT_SATISFIED,
+                reason=(
+                    "用户明确陈述劳动者没有提出"
+                    "订立固定期限劳动合同，"
+                    "因此该例外条件未被触发。"
                 ),
                 condition_type=EXCEPTION,
             )
@@ -1457,7 +1504,7 @@ def evaluate_rule(
         for item in condition_results
         if (
             item.condition_type == EXCLUSION
-            and item.status == NOT_SATISFIED
+            and item.status == SATISFIED
         )
     ]
 
@@ -1466,7 +1513,7 @@ def evaluate_rule(
         for item in condition_results
         if (
             item.condition_type == EXCEPTION
-            and item.status == NOT_SATISFIED
+            and item.status == SATISFIED
         )
     ]
 
@@ -1674,7 +1721,7 @@ def build_decision_explanation(
         for item in condition_results
         if (
             item.condition_type == EXCLUSION
-            and item.status == NOT_SATISFIED
+            and item.status == SATISFIED
         )
     ]
 
@@ -1683,7 +1730,7 @@ def build_decision_explanation(
         for item in condition_results
         if (
             item.condition_type == EXCEPTION
-            and item.status == NOT_SATISFIED
+            and item.status == SATISFIED
         )
     ]
 
@@ -1962,12 +2009,6 @@ def validate_decision_result(
         if item.status == UNKNOWN
     )
 
-    not_satisfied_count = sum(
-        1
-        for item in decision.condition_results
-        if item.status == NOT_SATISFIED
-    )
-
     required_not_satisfied_count = sum(
         1
         for item in decision.condition_results
@@ -1982,7 +2023,7 @@ def validate_decision_result(
         for item in decision.condition_results
         if (
             item.condition_type == EXCLUSION
-            and item.status == NOT_SATISFIED
+            and item.status == SATISFIED
         )
     )
 
@@ -1991,25 +2032,9 @@ def validate_decision_result(
         for item in decision.condition_results
         if (
             item.condition_type == EXCEPTION
-            and item.status == NOT_SATISFIED
+            and item.status == SATISFIED
         )
     )
-
-    categorized_not_satisfied_count = (
-        required_not_satisfied_count
-        + triggered_exclusion_count
-        + triggered_exception_count
-    )
-
-    if (
-        categorized_not_satisfied_count
-        != not_satisfied_count
-    ):
-
-        raise ValueError(
-            "Legal Decision Engine "
-            "NOT_SATISFIED 条件存在未正确分类的情况。"
-        )
 
     # --------------------------------------------------------
     # UNKNOWN → 不能 DEFINITE
@@ -2079,7 +2104,9 @@ def validate_decision_result(
 
     if (
         unknown_count > 0
-        and not_satisfied_count == 0
+        and required_not_satisfied_count == 0
+        and triggered_exclusion_count == 0
+        and triggered_exception_count == 0
         and decision.decision != CONDITIONAL
     ):
 
@@ -2096,7 +2123,9 @@ def validate_decision_result(
 
     if (
         unknown_count == 0
-        and not_satisfied_count == 0
+        and required_not_satisfied_count == 0
+        and triggered_exclusion_count == 0
+        and triggered_exception_count == 0
         and decision.decision != DEFINITE
     ):
 

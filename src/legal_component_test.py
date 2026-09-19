@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-RAG V6.0-27
+RAG V6.1
 Legal Component Test
 
 ============================================================
@@ -45,7 +45,7 @@ from src.legal_validator import (
     validate_fact_condition_mapping,
 )
 
-RAG_VERSION = "V6.0-27"
+RAG_VERSION = "V6.1"
 
 DECISION_CONDITIONAL = "CONDITIONAL"
 
@@ -114,7 +114,7 @@ def component_test():
     rules = ensure_list(context_data.get("rules", []))
 
     assert len(rules) > 0, (
-        "V6.0-27 Component Test：没有检索到任何法律规则"
+        "V6.1 Component Test：没有检索到任何法律规则"
     )
 
     print()
@@ -134,7 +134,7 @@ def component_test():
     )
 
     assert len(engine_condition_results) == 8, (
-        "V6.0-27 Component Test：Engine Condition Results 应为 8"
+        "V6.1 Component Test：Engine Condition Results 应为 8"
     )
 
     print(f"Engine Condition Results：{len(engine_condition_results)}")
@@ -150,11 +150,11 @@ def component_test():
     )
 
     assert adapted["engine_decision"] == DECISION_CONDITIONAL, (
-        "V6.0-27 Component Test：Engine Decision 应为 CONDITIONAL"
+        "V6.1 Component Test：Engine Decision 应为 CONDITIONAL"
     )
 
     assert adapted["decision"] == ANSWER_CONDITIONAL, (
-        "V6.0-27 Component Test：Builder Decision 应为 CONDITIONAL"
+        "V6.1 Component Test：Builder Decision 应为 CONDITIONAL"
     )
 
     # --------------------------------------------------------
@@ -168,7 +168,7 @@ def component_test():
         and "固定期限劳动合同" in normalize_text(fact)
         for fact in facts
     ), (
-        "V6.0-27 Component Test：用户事实“三次固定期限劳动合同”丢失"
+        "V6.1 Component Test：用户事实“三次固定期限劳动合同”丢失"
     )
 
     print("✅ Test 1：用户事实“三次固定期限劳动合同”保持原意")
@@ -192,19 +192,19 @@ def component_test():
     )
 
     assert three_mapping is not None, (
-        "V6.0-27 Component Test：缺少“三次→二次”数量门槛映射"
+        "V6.1 Component Test：缺少“三次→二次”数量门槛映射"
     )
 
     assert normalize_text(
         three_mapping.get("status", "")
     ).upper() == "SATISFIED", (
-        "V6.0-27 Component Test：三次→二次数量门槛必须为 SATISFIED"
+        "V6.1 Component Test：三次→二次数量门槛必须为 SATISFIED"
     )
 
     assert normalize_text(
         three_mapping.get("mapping_type", "")
     ) == "NUMERIC_THRESHOLD", (
-        "V6.0-27 Component Test：映射类型必须为 NUMERIC_THRESHOLD"
+        "V6.1 Component Test：映射类型必须为 NUMERIC_THRESHOLD"
     )
 
     print(
@@ -231,7 +231,7 @@ def component_test():
     assert forbidden_proofs.issubset(
         set(normalize_text(item) for item in does_not_prove)
     ), (
-        "V6.0-27 Component Test：三次合同的 does_not_prove 信息不完整"
+        "V6.1 Component Test：三次合同的 does_not_prove 信息不完整"
     )
 
     print("✅ Test 3：三次事实不得越权证明其它法律条件")
@@ -251,13 +251,13 @@ def component_test():
     )
 
     assert len(required_results) == 4, (
-        "V6.0-27 Component Test：Required Condition Results 应为 4"
+        "V6.1 Component Test：Required Condition Results 应为 4"
     )
     assert len(exclusion_results) == 3, (
-        "V6.0-27 Component Test：Exclusion Condition Results 应为 3"
+        "V6.1 Component Test：Exclusion Condition Results 应为 3"
     )
     assert len(exception_results) == 1, (
-        "V6.0-27 Component Test：Exception Results 应为 1"
+        "V6.1 Component Test：Exception Results 应为 1"
     )
 
     required_names = {
@@ -277,13 +277,13 @@ def component_test():
     }
 
     assert required_names.isdisjoint(exclusion_names), (
-        "V6.0-27 Component Test：Required / Exclusion 条件发生重复"
+        "V6.1 Component Test：Required / Exclusion 条件发生重复"
     )
     assert required_names.isdisjoint(exception_names), (
-        "V6.0-27 Component Test：Required / Exception 条件发生重复"
+        "V6.1 Component Test：Required / Exception 条件发生重复"
     )
     assert exclusion_names.isdisjoint(exception_names), (
-        "V6.0-27 Component Test：Exclusion / Exception 条件发生重复"
+        "V6.1 Component Test：Exclusion / Exception 条件发生重复"
     )
 
     print("✅ Test 4：Required / Exclusion / Exception 分类正确")
@@ -303,7 +303,7 @@ def component_test():
         "连续订立二次固定期限劳动合同",
         "存在后续订立的劳动合同",
     }, (
-        "V6.0-27 Component Test：当前事实下应满足数量门槛和后续合同存在条件"
+        "V6.1 Component Test：当前事实下应满足数量门槛和后续合同存在条件"
     )
 
     print("✅ Test 5：当前事实仅自动满足数量门槛")
@@ -326,7 +326,7 @@ def component_test():
         "续订劳动合同",
         "劳动者提出或者同意续订、订立劳动合同",
     }, (
-        "V6.0-27 Component Test：Required UNKNOWN 条件集合错误"
+        "V6.1 Component Test：Required UNKNOWN 条件集合错误"
     )
 
     print("✅ Test 6：Required UNKNOWN = 2，且只包含两个必备条件")
@@ -340,7 +340,7 @@ def component_test():
     )
 
     assert unknown_names.isdisjoint(forbidden_unknown_names), (
-        "V6.0-27 Component Test：Exclusion / Exception 被错误加入 unknown_conditions"
+        "V6.1 Component Test：Exclusion / Exception 被错误加入 unknown_conditions"
     )
 
     print("✅ Test 7：Exclusion / Exception 未混入普通 UNKNOWN")
@@ -360,7 +360,7 @@ def component_test():
         question=question,
         decision=adapted,
     ), (
-        "V6.0-27 Component Test：正确的 Fact → Condition 表达未通过验证"
+        "V6.1 Component Test：正确的 Fact → Condition 表达未通过验证"
     )
 
     wrong_answer_1 = (
@@ -372,7 +372,7 @@ def component_test():
         question=question,
         decision=adapted,
     ), (
-        "V6.0-27 Component Test：错误的无固定期限合同条件偷换未被拦截"
+        "V6.1 Component Test：错误的无固定期限合同条件偷换未被拦截"
     )
 
     wrong_answer_2 = (
@@ -384,7 +384,7 @@ def component_test():
         question=question,
         decision=adapted,
     ), (
-        "V6.0-27 Component Test：错误的第三次合同存在性判断未被拦截"
+        "V6.1 Component Test：错误的第三次合同存在性判断未被拦截"
     )
 
     print("✅ Test 8：Fact → Condition 条件偷换验证正确")
@@ -396,13 +396,13 @@ def component_test():
     assert three_mapping.get("dependency") == (
         "THREE_CONTRACTS_MEET_TWO_CONTRACT_THRESHOLD"
     ), (
-        "V6.0-27 Component Test：Rule Dependency 标识错误"
+        "V6.1 Component Test：Rule Dependency 标识错误"
     )
 
     assert normalize_text(
         three_mapping.get("fact", "")
     ) == "公司连续签订三次固定期限劳动合同", (
-        "V6.0-27 Component Test：Mapping fact 必须保持用户事实原意"
+        "V6.1 Component Test：Mapping fact 必须保持用户事实原意"
     )
 
     print("✅ Test 9：Rule Dependency 结构完整")
@@ -427,7 +427,7 @@ def component_test():
     print(f"Unknown Conditions：{len(unknown_conditions)}")
     print(f"Fact Mappings：{len(mappings)}")
     print()
-    print("🎉 RAG V6.0-27 Component Test 全部通过")
+    print("🎉 RAG V6.1 Component Test 全部通过")
 
     return adapted
 

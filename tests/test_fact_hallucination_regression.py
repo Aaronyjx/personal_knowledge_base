@@ -109,7 +109,7 @@ def extract_user_fact_section(answer: str) -> str:
 def main():
 
     print("=" * 70)
-    print("RAG V6.0-27 用户事实幻觉回归测试")
+    print("RAG V6.1 用户事实幻觉回归测试")
     print("=" * 70)
 
     print()
@@ -894,7 +894,7 @@ def main():
     print("=" * 70)
 
     print()
-    print("🎉 RAG V6.0-27 用户事实幻觉回归测试全部通过")
+    print("🎉 RAG V6.1 用户事实幻觉回归测试全部通过")
 
     print()
     print("第一组：第39条幻觉事实")

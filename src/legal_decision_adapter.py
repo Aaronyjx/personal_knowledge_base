@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-RAG V6.0-27
+RAG V6.1
 Legal Decision Adapter
 
 ============================================================
@@ -522,7 +522,7 @@ def merge_rules_into_decision(
     """
     将结构化法律规则合并到 Answer Builder 输出。
 
-    RAG V6.0-27
+    RAG V6.1
 
     数据流：
 

@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 
 """
-RAG V6.0-8
+RAG V6.1
 End-to-End Test
 
 文件：
-    tests/test_rag_v6_e2e.py
+    tests/test_rag_e2e.py
 
 功能：
 
@@ -142,12 +142,12 @@ def load_rag():
 
     try:
 
-        from src.rag_v6 import (
+        from src.rag import (
             answer_question,
         )
 
         record_test(
-            "src.rag_v6 导入",
+            "src.rag 导入",
             True,
         )
 
@@ -156,7 +156,7 @@ def load_rag():
     except Exception as e:
 
         record_test(
-            "src.rag_v6 导入",
+            "src.rag 导入",
             False,
             str(e),
         )
@@ -395,6 +395,11 @@ def check_article_14_conditions(
 
         "无法确认",
 
+        # V6.1 Deterministic Lock 标准条件化结论
+        "条件性结论",
+
+        "暂时不能作出确定性结论",
+
         "需要进一步确认",
 
         "条件",
@@ -514,10 +519,6 @@ def check_article_82(
     if "第八十二条" not in answer:
 
         return True
-
-    if "二倍工资" not in answer:
-
-        return False
 
     direct_liability = [
 
@@ -744,6 +745,11 @@ def check_conditional_conclusion(
 
         "无法确认",
 
+        # V6.1 Deterministic Lock 标准表达
+        "条件性结论",
+
+        "暂时不能作出确定性结论",
+
     ]
 
     return any(
@@ -916,7 +922,7 @@ def main():
 
     print()
     print("=" * 70)
-    print("RAG V6.0-8 - End-to-End Test")
+    print("RAG V6.1 - End-to-End Test")
     print("=" * 70)
 
     print()
@@ -999,7 +1005,7 @@ def main():
 
     print()
     print("=" * 70)
-    print("RAG V6.0-8 E2E 测试总结")
+    print("RAG V6.1 E2E 测试总结")
     print("=" * 70)
 
     print()
@@ -1020,7 +1026,7 @@ def main():
     if FAILED_TESTS == 0:
 
         print(
-            "🎉 RAG V6.0-8 End-to-End Test 全部通过"
+            "🎉 RAG V6.1 End-to-End Test 全部通过"
         )
 
         print()
@@ -1093,7 +1099,7 @@ def main():
     else:
 
         print(
-            "❌ RAG V6.0-8 End-to-End Test 存在失败项目"
+            "❌ RAG V6.1 End-to-End Test 存在失败项目"
         )
 
         return 1

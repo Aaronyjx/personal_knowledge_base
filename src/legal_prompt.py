@@ -317,7 +317,7 @@ def build_ollama_prompt(
     decision: Dict[str, Any],
 ) -> str:
     """
-    RAG V6.0-27
+    RAG V6.1
     Ollama 最终回答 Prompt
 
     ============================================================

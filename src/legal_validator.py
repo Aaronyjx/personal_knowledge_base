@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-RAG V6.0-27
+RAG V6.1
 Legal Validation Layer
 
 ============================================================
@@ -784,19 +784,43 @@ def validate_decision_consistency(
             "尚不能确认",
             "无法确认是否满足",
             "条件尚未确认",
+            "无法作出确定性结论",
+            "当前条件未知",
+            "部分条件未知",
+            "以上条件未知",
         ]
 
-        # DEFINITE 不应被 Ollama 改写成完全未知。
+        # ========================================================
+        # DEFINITE 语义边界
+        # ========================================================
         #
-        # 但这里只做非常保守的检查，
-        # 避免误伤正常的注意事项。
+        # Engine 已经判定：
+        #
+        #     DEFINITE
+        #
+        # 则 Ollama 不得把最终法律结论降级为：
+        #
+        #     UNKNOWN
+        #     CONDITIONAL
+        #
+        # 特别是不能出现：
+        #
+        #     “条件尚未确认”
+        #     “无法作出确定性结论”
+        #     “部分条件未知”
+        #
+        # 这些表达直接否定 Engine 的 DEFINITE 决策。
+        #
+        # 注意：
+        #
+        # 这里只检查最终答案中的确定性状态表达，
+        # 不重新进行法律推理。
+        # ========================================================
 
-        if (
-            answer.count("尚不能确认") > 2
-            or
-            answer.count("无法确认是否满足") > 2
-        ):
-            return False
+        for pattern in forbidden:
+
+            if pattern in answer:
+                return False
 
     if engine_status == DECISION_NOT_ESTABLISHED:
 
@@ -1024,7 +1048,7 @@ def final_validation(
     decision: Dict[str, Any],
 ) -> str:
     """
-    RAG V6.0-27 Final Validation。
+    RAG V6.1 Final Validation。
 
     最终验证层负责：
 
@@ -1308,7 +1332,7 @@ def final_validation(
     # --------------------------------------------------------
 
     print()
-    print("⚠️ V6.0-27 启用安全 Fallback。")
+    print("⚠️ V6.1 启用安全 Fallback。")
 
     fallback = build_fallback_answer(
         question=question,

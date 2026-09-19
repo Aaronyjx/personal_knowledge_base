@@ -678,7 +678,7 @@ def case_05_article_39_triggered():
     assert_status(
         status_map,
         EXCLUSION_CONDITIONS[0],
-        "NOT_SATISFIED",
+        "SATISFIED",
     )
 
     assert_status(
@@ -744,7 +744,7 @@ def case_06_article_40_1_triggered():
     assert_status(
         status_map,
         EXCLUSION_CONDITIONS[1],
-        "NOT_SATISFIED",
+        "SATISFIED",
     )
 
     assert_status(
@@ -810,7 +810,7 @@ def case_07_article_40_2_triggered():
     assert_status(
         status_map,
         EXCLUSION_CONDITIONS[2],
-        "NOT_SATISFIED",
+        "SATISFIED",
     )
 
     assert_status(
@@ -864,7 +864,7 @@ def case_08_fixed_term_exception():
     assert_status(
         status_map,
         EXCEPTION_CONDITIONS[0],
-        "NOT_SATISFIED",
+        "SATISFIED",
     )
 
     assert decision.decision == "NOT_ESTABLISHED"
@@ -908,13 +908,13 @@ def case_09_no_exclusions():
     assert_all_statuses(
         status_map,
         EXCLUSION_CONDITIONS,
-        "SATISFIED",
+        "NOT_SATISFIED",
     )
 
     assert_status(
         status_map,
         EXCEPTION_CONDITIONS[0],
-        "SATISFIED",
+        "NOT_SATISFIED",
     )
 
     assert decision.decision == "DEFINITE"
@@ -967,28 +967,36 @@ def case_10_full_definite():
 
     # --------------------------------------------------------
     # 三个 EXCLUSION
+    #
+    # 明确不存在法定排除情形
+    # → NOT_SATISFIED
     # --------------------------------------------------------
 
     assert_all_statuses(
         status_map,
         EXCLUSION_CONDITIONS,
-        "SATISFIED",
+        "NOT_SATISFIED",
     )
 
     # --------------------------------------------------------
     # 一个 EXCEPTION
+    #
+    # 明确没有提出订立固定期限劳动合同
+    # → NOT_SATISFIED
     # --------------------------------------------------------
 
     assert_status(
         status_map,
         EXCEPTION_CONDITIONS[0],
-        "SATISFIED",
+        "NOT_SATISFIED",
     )
 
     # --------------------------------------------------------
     # 最终：
     #
-    # 8 / 8 SATISFIED
+    # REQUIRED：4 / 4 SATISFIED
+    # EXCLUSION：3 / 3 NOT_SATISFIED
+    # EXCEPTION：1 / 1 NOT_SATISFIED
     #
     # → DEFINITE
     # --------------------------------------------------------
