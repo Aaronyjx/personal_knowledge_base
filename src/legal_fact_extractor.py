@@ -633,23 +633,41 @@ def extract_legal_facts(
     )
 
     # ========================================================
-    # 第三步：从 explicit_facts 读取 Worker Agreement
+    # 第三步：劳动者提出或者同意续订
+    #
+    # V6.1：
+    #
+    # worker_agreement 是结构化用户事实，
+    # 必须直接来自用户问题的事实提取结果。
+    #
+    # 不再从 explicit_facts 反向读取。
+    #
+    # 这样可以避免：
+    #
+    # question
+    #     ↓
+    # explicit_facts
+    #     ↓
+    # worker_agreement
+    #
+    # 形成不必要的 Fact → Fact 依赖。
+    #
+    # has_worker_agreement() 是 Worker Agreement
+    # 事实的唯一识别入口。
+    #
+    # True  = 用户明确表达
+    # None  = 用户没有明确表达
     #
     # 注意：
     #
-    # 不从 Condition 层反向生成用户事实。
-    #
-    # explicit_facts 是唯一的汇总事实来源。
+    # False 不由本层推导。
     # ========================================================
 
-    worker_agreement = None
-
-    if (
-        "劳动者明确提出或者同意续订、订立劳动合同"
-        in explicit_facts
-    ):
-
-        worker_agreement = True
+    worker_agreement = (
+        True
+        if has_worker_agreement(question)
+        else None
+    )
 
     # ========================================================
     # 第四步：排除 / 例外事实
