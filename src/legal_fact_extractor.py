@@ -30,10 +30,9 @@ Legal Decision Engine
 
 本模块只负责：
 
-    1. 从用户问题中提取明确表达的事实
-    2. 识别合同序列
-    3. 识别已经完成的续订/续签事实
-    4. 将已经提取的事实组装成 LegalFacts
+    1. 统一协调事实提取模块
+    2. 汇总用户明确表达的事实
+    3. 将已经提取的事实组装成 LegalFacts
 
 本模块不负责：
 
@@ -46,23 +45,28 @@ Legal Decision Engine
     - 法律结论推定
 
 ============================================================
-V6.1 第一刀
+V6.1 第一阶段
 ============================================================
 
-从 legal_decision_engine.py 中独立事实提取逻辑。
+从原有 Legal Decision Engine 中独立事实提取逻辑。
 
-当前保留 V6.0-27 已验证的事实识别规则：
+事实识别规则现在已经进一步拆分为：
 
-    - 三次固定期限劳动合同
-    - 两次固定期限劳动合同
-    - 已完成续订
-    - 劳动者提出或者同意续订
-    - 固定期限例外
-    - 固定期限例外的明确否定
-    - 第三十九条
-    - 第四十条第一项
-    - 第四十条第二项
-    - 第39条 + 第40条组合否定事实
+    legal_fact_contract.py
+        ↓
+    合同序列事实
+
+    legal_fact_renewal.py
+        ↓
+    续订 / 续签 / 劳动者同意事实
+
+    legal_fact_exclusion.py
+        ↓
+    第三十九条
+    第四十条第一项
+    第四十条第二项
+    固定期限例外
+    组合否定事实
 
 ============================================================
 V6.1 第二阶段
@@ -72,7 +76,7 @@ V6.1 第二阶段
 
     extract_legal_facts()
 
-负责将现有事实提取结果统一组装成：
+负责将事实提取结果统一组装成：
 
     LegalFacts
 
@@ -81,11 +85,11 @@ V6.1 第二阶段
     extract_legal_facts()
     不重新实现事实识别规则。
 
-而是复用：
+事实识别仍然由独立模块完成：
 
-    extract_explicit_facts()
-    extract_contract_sequence()
-    has_completed_renewal()
+    legal_fact_contract.py
+    legal_fact_renewal.py
+    legal_fact_exclusion.py
 
 从而保证：
 
@@ -123,183 +127,41 @@ V6.1 第二阶段
        UNKNOWN
 
    这些属于 Legal Decision Engine 的 Condition 层语义。
+
 ============================================================
+模块依赖关系
+============================================================
+
+    legal_common.py
+          │
+          ├──────────────────────┐
+          ↓                      ↓
+    legal_fact_contract    legal_fact_renewal
+          │                      │
+          │                      │
+          └──────────┬───────────┘
+                     ↓
+             legal_fact_exclusion
+                     │
+                     ↓
+           legal_fact_extractor
+                     │
+                     ↓
+               LegalFacts
 """
 
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import List
 
-from src.legal_common import normalize_text
-from src.legal_fact_models import (
-    ContractSequence,
-    LegalFacts,
+from src.legal_common import normalize_text, unique_texts
+from src.legal_fact_contract import extract_contract_sequence
+from src.legal_fact_exclusion import extract_exclusion_facts
+from src.legal_fact_models import LegalFacts
+from src.legal_fact_renewal import (
+    has_completed_renewal,
+    has_worker_agreement,
 )
-
-
-# ============================================================
-# Text Helpers
-# ============================================================
-
-def contains_any(
-    text: str,
-    patterns: List[str],
-) -> bool:
-    """
-    判断文本是否包含任意模式。
-
-    注意：
-
-        事实提取层使用与 V6.0-27 Engine
-        相同的标准化规则。
-    """
-
-    normalized = normalize_text(text)
-
-    return any(
-        normalize_text(pattern)
-        in normalized
-        for pattern in patterns
-    )
-
-
-def unique_texts(
-    values: List[str],
-) -> List[str]:
-    """
-    去重并保持原顺序。
-    """
-
-    result: List[str] = []
-
-    seen = set()
-
-    for value in values:
-
-        if value in seen:
-            continue
-
-        seen.add(value)
-
-        result.append(value)
-
-    return result
-
-
-# ============================================================
-# Combined Negative Patterns
-# ============================================================
-
-COMBINED_ARTICLE_39_40_NEGATIVE_PATTERNS = [
-    "不存在劳动合同法第三十九条和第四十条第一项、第二项规定的情形",
-    "不存在《劳动合同法》第三十九条和第四十条第一项、第二项规定的情形",
-    "不存在劳动合同法第三十九条和第四十条第一项及第二项规定的情形",
-    "不存在《劳动合同法》第三十九条和第四十条第一项及第二项规定的情形",
-    "不存在劳动合同法第三十九条、第四十条第一项、第二项规定的情形",
-    "不存在《劳动合同法》第三十九条、第四十条第一项、第二项规定的情形",
-
-    "没有劳动合同法第三十九条和第四十条第一项、第二项规定的情形",
-    "没有《劳动合同法》第三十九条和第四十条第一项、第二项规定的情形",
-    "没有劳动合同法第三十九条和第四十条第一项及第二项规定的情形",
-    "没有《劳动合同法》第三十九条和第四十条第一项及第二项规定的情形",
-
-    "不具有劳动合同法第三十九条和第四十条第一项、第二项规定的情形",
-    "不具有《劳动合同法》第三十九条和第四十条第一项、第二项规定的情形",
-    "不具有劳动合同法第三十九条和第四十条第一项及第二项规定的情形",
-    "不具有《劳动合同法》第三十九条和第四十条第一项及第二项规定的情形",
-]
-
-
-# ============================================================
-# Completed Renewal Detection
-# ============================================================
-
-def has_completed_renewal(
-    question: str,
-) -> bool:
-    """
-    判断问题中是否存在明确的“已经完成续订/续签”事实。
-
-    重要原则：
-
-        “准备续订”
-        “计划续订”
-        “打算续订”
-        “拟续订”
-
-    均不能视为已经完成续订。
-
-    同样：
-
-        “劳动者同意续订”
-
-    只能证明劳动者同意，
-    不能单独证明续订已经完成。
-    """
-
-    text = normalize_text(question)
-
-    renewal_patterns = [
-
-        "已经续订劳动合同",
-        "已经续签劳动合同",
-
-        "已经续订了劳动合同",
-        "已经续签了劳动合同",
-
-        "已续订劳动合同",
-        "已续签劳动合同",
-
-        "已经续订",
-        "已经续签",
-
-        "已续订",
-        "已续签",
-
-        "后来已经续订劳动合同",
-        "后来已经续签劳动合同",
-
-        "后来已经续订了劳动合同",
-        "后来已经续签了劳动合同",
-
-        "之后已经续订劳动合同",
-        "之后已经续签劳动合同",
-
-        "之后已经续订了劳动合同",
-        "之后已经续签了劳动合同",
-
-        "之后续订劳动合同",
-        "之后续签劳动合同",
-
-        "之后续订了劳动合同",
-        "之后续签了劳动合同",
-
-        "后来又续订劳动合同",
-        "后来又续签劳动合同",
-
-        "后来又续订了劳动合同",
-        "后来又续签了劳动合同",
-
-        "之后又已经续订劳动合同",
-        "之后又已经续签劳动合同",
-
-        "第三次已经续订",
-        "第三次已经续签",
-
-        "第三次已续订",
-        "第三次已续签",
-
-        "第三次已经续订劳动合同",
-        "第三次已经续签劳动合同",
-
-        "第三次已续订劳动合同",
-        "第三次已续签劳动合同",
-    ]
-
-    return contains_any(
-        text,
-        renewal_patterns,
-    )
 
 
 # ============================================================
@@ -312,34 +174,149 @@ def extract_explicit_facts(
     """
     从用户问题中提取明确事实。
 
-    注意：
+    ========================================================
+    职责
+    ========================================================
 
-        这里只提取用户明确表达的事实，
-        不进行法律结论推定。
+    本函数现在作为：
 
-    V6.0-16 修复：
+        “事实提取总协调器”
 
-        支持组合否定事实：
+    不再直接实现：
 
-            不存在劳动合同法第三十九条和
-            第四十条第一项、第二项规定的情形
+        - 合同次数识别规则
+        - 续订识别规则
+        - 劳动者同意识别规则
+        - Article 39 识别规则
+        - Article 40(1) 识别规则
+        - Article 40(2) 识别规则
+        - 固定期限例外识别规则
 
-        必须拆解为三个明确事实：
+    上述规则分别由：
 
-            - 不存在第三十九条规定的情形
-            - 不存在第四十条第一项规定的情形
-            - 不存在第四十条第二项规定的情形
+        legal_fact_contract.py
+        legal_fact_renewal.py
+        legal_fact_exclusion.py
+
+    负责。
+
+    ========================================================
+    重要原则
+    ========================================================
+
+    本函数只汇总：
+
+        用户明确表达的事实。
+
+    不进行：
+
+        法律推定
+        条件判断
+        Decision 判断
+        ConditionResult 判断
+
+    ========================================================
+    V6.0-27 行为保持
+    ========================================================
+
+    保留原有 explicit_facts 输出字符串：
+
+        公司连续签订三次固定期限劳动合同
+
+        连续订立二次固定期限劳动合同
+
+        存在明确续订劳动合同事实
+
+        劳动者明确提出或者同意续订、订立劳动合同
+
+        劳动者提出订立固定期限劳动合同
+
+        劳动者没有提出订立固定期限劳动合同
+
+        劳动者不存在《劳动合同法》第三十九条规定的情形
+
+        劳动者存在《劳动合同法》第三十九条规定的情形
+
+        劳动者不存在《劳动合同法》第四十条第一项规定的情形
+
+        劳动者存在《劳动合同法》第四十条第一项规定的情形
+
+        劳动者不存在《劳动合同法》第四十条第二项规定的情形
+
+        劳动者存在《劳动合同法》第四十条第二项规定的情形
+
+    ========================================================
+    注意
+    ========================================================
+
+    本函数不直接修改：
+
+        LegalFacts
+
+    只返回：
+
+        explicit_facts
     """
-
-    text = normalize_text(question)
 
     facts: List[str] = []
 
+    # ========================================================
+    # 一、合同事实
+    # ========================================================
+
+    contract_sequence = extract_contract_sequence(
+        question
+    )
+
     # --------------------------------------------------------
-    # 三次固定期限劳动合同
+    # 重要边界：
+    #
+    # explicit_facts 只记录用户明确表达的事实。
+    #
+    # 不能使用 contract_sequence.count 反向制造
+    # 用户没有明确说出的“三次固定期限劳动合同”事实。
+    #
+    # 例如：
+    #
+    # “连续签订两次固定期限劳动合同，后来又续订”
+    #
+    # contract_sequence 可以结构化为：
+    #
+    #     count = 3
+    #
+    # 但用户明确表达的仍然只是：
+    #
+    #     连续签订两次固定期限劳动合同
+    #     存在明确续订劳动合同事实
+    #
+    # 因此这里必须直接检查用户原文。
     # --------------------------------------------------------
 
-    three_contract_patterns = [
+    normalized_question = normalize_text(
+        question
+    )
+
+    # --------------------------------------------------------
+    # 用户明确表达“三次固定期限劳动合同”的事实模式。
+    #
+    # 注意：
+    #
+    # 这里与 legal_fact_contract.py 中的结构化识别规则
+    # 可以存在相同模式，但职责不同。
+    #
+    # legal_fact_contract.py：
+    #
+    #     负责生成 ContractSequence
+    #
+    # 本函数：
+    #
+    #     负责判断用户是否明确说出了该事实，
+    #     从而生成 explicit_facts。
+    #
+    # 不能使用 contract_sequence.count 作为判断依据。
+    # --------------------------------------------------------
+
+    THREE_CONTRACT_FACT_PATTERNS = [
         "连续签订三次固定期限劳动合同",
         "连续订立三次固定期限劳动合同",
         "连续签了三次固定期限劳动合同",
@@ -347,20 +324,7 @@ def extract_explicit_facts(
         "连续订立了三次固定期限劳动合同",
     ]
 
-    if contains_any(
-        text,
-        three_contract_patterns,
-    ):
-
-        facts.append(
-            "公司连续签订三次固定期限劳动合同"
-        )
-
-    # --------------------------------------------------------
-    # 两次固定期限劳动合同
-    # --------------------------------------------------------
-
-    two_contract_patterns = [
+    TWO_CONTRACT_FACT_PATTERNS = [
         "连续签订两次固定期限劳动合同",
         "连续订立两次固定期限劳动合同",
         "连续签了两次固定期限劳动合同",
@@ -368,225 +332,105 @@ def extract_explicit_facts(
         "连续订立了两次固定期限劳动合同",
     ]
 
-    if contains_any(
-        text,
-        two_contract_patterns,
-    ):
+    # --------------------------------------------------------
+    # 三次固定期限劳动合同
+    #
+    # 只有用户原文明确出现“三次”，
+    # 才允许写入：
+    #
+    #     公司连续签订三次固定期限劳动合同
+    #
+    # 即使 contract_sequence.count == 3，
+    # 也不能在这里自动生成该事实。
+    # --------------------------------------------------------
 
+    if any(
+        normalize_text(pattern) in normalized_question
+        for pattern in THREE_CONTRACT_FACT_PATTERNS
+    ):
+        facts.append(
+            "公司连续签订三次固定期限劳动合同"
+        )
+
+    # --------------------------------------------------------
+    # 两次固定期限劳动合同
+    #
+    # 注意：
+    #
+    # 如果问题是：
+    #
+    #     “公司连续签订两次固定期限劳动合同，
+    #      后来又续订劳动合同”
+    #
+    # contract_sequence.count
+    # 可能已经被结构化为：
+    #
+    #     3
+    #
+    # 但是 explicit_facts 仍然必须记录：
+    #
+    #     连续订立二次固定期限劳动合同
+    #
+    # 而不能错误生成：
+    #
+    #     公司连续签订三次固定期限劳动合同
+    #
+    # 这就是：
+    #
+    #     “结构化事实不能反向污染显式用户事实”
+    # --------------------------------------------------------
+
+    elif any(
+        normalize_text(pattern) in normalized_question
+        for pattern in TWO_CONTRACT_FACT_PATTERNS
+    ):
         facts.append(
             "连续订立二次固定期限劳动合同"
         )
 
-    # --------------------------------------------------------
-    # 已完成续订
-    # --------------------------------------------------------
+    # ========================================================
+    # 二、续订事实
+    # ========================================================
 
-    if has_completed_renewal(text):
+    if has_completed_renewal(question):
 
         facts.append(
             "存在明确续订劳动合同事实"
         )
 
-    # --------------------------------------------------------
-    # 劳动者提出或者同意续订
-    # --------------------------------------------------------
+    # ========================================================
+    # 三、劳动者提出或者同意续订
+    # ========================================================
 
-    worker_agreement_patterns = [
-        "劳动者同意续订",
-        "劳动者同意续签",
-        "劳动者同意订立劳动合同",
-
-        "劳动者提出续订",
-        "劳动者提出续签",
-        "劳动者提出订立劳动合同",
-
-        "劳动者明确同意续订",
-        "劳动者明确同意续签",
-
-        "劳动者明确提出续订",
-        "劳动者明确提出续签",
-
-        "劳动者也同意续订",
-        "劳动者也同意续签",
-        "劳动者也同意订立劳动合同",
-
-        "劳动者也提出续订",
-        "劳动者也提出续签",
-        "劳动者也提出订立劳动合同",
-
-        "劳动者也明确同意续订",
-        "劳动者也明确同意续签",
-
-        "劳动者也明确提出续订",
-        "劳动者也明确提出续签",
-
-        "员工同意续订",
-        "员工同意续签",
-        "员工同意订立劳动合同",
-
-        "员工提出续订",
-        "员工提出续签",
-        "员工提出订立劳动合同",
-
-        "员工明确同意续订",
-        "员工明确同意续签",
-
-        "员工也同意续订",
-        "员工也同意续签",
-        "员工也同意订立劳动合同",
-
-        "员工也提出续订",
-        "员工也提出续签",
-        "员工也提出订立劳动合同",
-
-        "员工也明确同意续订",
-        "员工也明确同意续签",
-
-        "员工明确提出续订",
-        "员工明确提出续签",
-    ]
-
-    if contains_any(
-        text,
-        worker_agreement_patterns,
-    ):
+    if has_worker_agreement(question):
 
         facts.append(
             "劳动者明确提出或者同意续订、订立劳动合同"
         )
 
-    # --------------------------------------------------------
-    # 固定期限例外
-    # --------------------------------------------------------
+    # ========================================================
+    # 四、Article 39 / Article 40 / Fixed-Term Exception
+    # ========================================================
 
-    fixed_term_exception_patterns = [
-        "劳动者提出订立固定期限劳动合同",
-        "劳动者提出签订固定期限劳动合同",
-        "劳动者要求订立固定期限劳动合同",
-        "劳动者要求签订固定期限劳动合同",
-        "劳动者主动提出订立固定期限劳动合同",
-        "劳动者主动提出签订固定期限劳动合同",
-    ]
-
-    if contains_any(
-        text,
-        fixed_term_exception_patterns,
-    ):
-
-        facts.append(
-            "劳动者提出订立固定期限劳动合同"
-        )
-
-    # --------------------------------------------------------
-    # 固定期限例外：明确否定
-    # --------------------------------------------------------
-
-    fixed_term_exception_negative_patterns = [
-        "劳动者没有提出订立固定期限劳动合同",
-        "劳动者未提出订立固定期限劳动合同",
-        "劳动者并没有提出订立固定期限劳动合同",
-        "劳动者并未提出订立固定期限劳动合同",
-
-        "劳动者没有提出签订固定期限劳动合同",
-        "劳动者未提出签订固定期限劳动合同",
-        "劳动者并没有提出签订固定期限劳动合同",
-        "劳动者并未提出签订固定期限劳动合同",
-
-        "劳动者没有要求订立固定期限劳动合同",
-        "劳动者未要求订立固定期限劳动合同",
-        "劳动者并没有要求订立固定期限劳动合同",
-        "劳动者并未要求订立固定期限劳动合同",
-
-        # “也”版本
-        "劳动者也没有提出订立固定期限劳动合同",
-        "劳动者也未提出订立固定期限劳动合同",
-        "劳动者也并没有提出订立固定期限劳动合同",
-        "劳动者也并未提出订立固定期限劳动合同",
-
-        "劳动者也没有提出签订固定期限劳动合同",
-        "劳动者也未提出签订固定期限劳动合同",
-        "劳动者也并没有提出签订固定期限劳动合同",
-        "劳动者也并未提出签订固定期限劳动合同",
-
-        "劳动者也没有要求订立固定期限劳动合同",
-        "劳动者也未要求订立固定期限劳动合同",
-        "劳动者也并没有要求订立固定期限劳动合同",
-        "劳动者也并未要求订立固定期限劳动合同",
-    ]
-
-    if contains_any(
-        text,
-        fixed_term_exception_negative_patterns,
-    ):
-
-        facts.append(
-            "劳动者没有提出订立固定期限劳动合同"
-        )
-
-    # --------------------------------------------------------
-    # Article 39 / Article 40 组合否定
-    # --------------------------------------------------------
-
-    if contains_any(
-        text,
-        COMBINED_ARTICLE_39_40_NEGATIVE_PATTERNS,
-    ):
-
-        facts.append(
-            "劳动者不存在《劳动合同法》第三十九条规定的情形"
-        )
-
-        facts.append(
-            "劳动者不存在《劳动合同法》第四十条第一项规定的情形"
-        )
-
-        facts.append(
-            "劳动者不存在《劳动合同法》第四十条第二项规定的情形"
-        )
+    exclusion_facts = extract_exclusion_facts(
+        question
+    )
 
     # --------------------------------------------------------
     # Article 39
     # --------------------------------------------------------
 
-    article_39_negative_patterns = [
-        "不存在劳动合同法第三十九条规定的情形",
-        "不存在《劳动合同法》第三十九条规定的情形",
-        "没有劳动合同法第三十九条规定的情形",
-        "没有《劳动合同法》第三十九条规定的情形",
-        "不具有劳动合同法第三十九条规定的情形",
-        "不具有《劳动合同法》第三十九条规定的情形",
-        "不符合劳动合同法第三十九条",
-        "不符合《劳动合同法》第三十九条",
-    ]
+    article_39 = exclusion_facts.get(
+        "article_39"
+    )
 
-    article_39_positive_patterns = [
-        "存在劳动合同法第三十九条规定的情形",
-        "存在《劳动合同法》第三十九条规定的情形",
-        "符合劳动合同法第三十九条",
-        "符合《劳动合同法》第三十九条",
-        "属于劳动合同法第三十九条规定的情形",
-        "属于《劳动合同法》第三十九条规定的情形",
-    ]
-
-    if (
-        not contains_any(
-            text,
-            COMBINED_ARTICLE_39_40_NEGATIVE_PATTERNS,
-        )
-        and contains_any(
-            text,
-            article_39_negative_patterns,
-        )
-    ):
+    if article_39 is False:
 
         facts.append(
             "劳动者不存在《劳动合同法》第三十九条规定的情形"
         )
 
-    elif contains_any(
-        text,
-        article_39_positive_patterns,
-    ):
+    elif article_39 is True:
 
         facts.append(
             "劳动者存在《劳动合同法》第三十九条规定的情形"
@@ -596,45 +440,17 @@ def extract_explicit_facts(
     # Article 40(1)
     # --------------------------------------------------------
 
-    article_40_1_negative_patterns = [
-        "不存在劳动合同法第四十条第一项规定的情形",
-        "不存在《劳动合同法》第四十条第一项规定的情形",
-        "没有劳动合同法第四十条第一项规定的情形",
-        "没有《劳动合同法》第四十条第一项规定的情形",
-        "不具有劳动合同法第四十条第一项规定的情形",
-        "不具有《劳动合同法》第四十条第一项规定的情形",
-        "不符合劳动合同法第四十条第一项",
-        "不符合《劳动合同法》第四十条第一项",
-    ]
+    article_40_1 = exclusion_facts.get(
+        "article_40_1"
+    )
 
-    article_40_1_positive_patterns = [
-        "存在劳动合同法第四十条第一项规定的情形",
-        "存在《劳动合同法》第四十条第一项规定的情形",
-        "符合劳动合同法第四十条第一项",
-        "符合《劳动合同法》第四十条第一项",
-        "属于劳动合同法第四十条第一项规定的情形",
-        "属于《劳动合同法》第四十条第一项规定的情形",
-    ]
-
-    if (
-        not contains_any(
-            text,
-            COMBINED_ARTICLE_39_40_NEGATIVE_PATTERNS,
-        )
-        and contains_any(
-            text,
-            article_40_1_negative_patterns,
-        )
-    ):
+    if article_40_1 is False:
 
         facts.append(
             "劳动者不存在《劳动合同法》第四十条第一项规定的情形"
         )
 
-    elif contains_any(
-        text,
-        article_40_1_positive_patterns,
-    ):
+    elif article_40_1 is True:
 
         facts.append(
             "劳动者存在《劳动合同法》第四十条第一项规定的情形"
@@ -644,148 +460,49 @@ def extract_explicit_facts(
     # Article 40(2)
     # --------------------------------------------------------
 
-    article_40_2_negative_patterns = [
-        "不存在劳动合同法第四十条第二项规定的情形",
-        "不存在《劳动合同法》第四十条第二项规定的情形",
-        "没有劳动合同法第四十条第二项规定的情形",
-        "没有《劳动合同法》第四十条第二项规定的情形",
-        "不具有劳动合同法第四十条第二项规定的情形",
-        "不具有《劳动合同法》第四十条第二项规定的情形",
-        "不符合劳动合同法第四十条第二项",
-        "不符合《劳动合同法》第四十条第二项",
-    ]
+    article_40_2 = exclusion_facts.get(
+        "article_40_2"
+    )
 
-    article_40_2_positive_patterns = [
-        "存在劳动合同法第四十条第二项规定的情形",
-        "存在《劳动合同法》第四十条第二项规定的情形",
-        "符合劳动合同法第四十条第二项",
-        "符合《劳动合同法》第四十条第二项",
-        "属于劳动合同法第四十条第二项规定的情形",
-        "属于《劳动合同法》第四十条第二项规定的情形",
-    ]
-
-    if (
-        not contains_any(
-            text,
-            COMBINED_ARTICLE_39_40_NEGATIVE_PATTERNS,
-        )
-        and contains_any(
-            text,
-            article_40_2_negative_patterns,
-        )
-    ):
+    if article_40_2 is False:
 
         facts.append(
             "劳动者不存在《劳动合同法》第四十条第二项规定的情形"
         )
 
-    elif contains_any(
-        text,
-        article_40_2_positive_patterns,
-    ):
+    elif article_40_2 is True:
 
         facts.append(
             "劳动者存在《劳动合同法》第四十条第二项规定的情形"
         )
 
     # --------------------------------------------------------
-    # 返回去重后的明确事实
+    # Fixed-Term Exception
     # --------------------------------------------------------
 
-    return unique_texts(facts)
+    fixed_term_exception = exclusion_facts.get(
+        "fixed_term_exception"
+    )
 
+    if fixed_term_exception is True:
 
-# ============================================================
-# Contract Sequence Extraction
-# ============================================================
-
-def extract_contract_sequence(
-    question: str,
-) -> Optional[ContractSequence]:
-    """
-    提取合同序列。
-
-    规则：
-
-        三次固定期限
-            → count = 3
-
-        两次固定期限 + 明确后续续订/续签
-            → count = 3
-
-        两次固定期限
-            → count = 2
-    """
-
-    text = normalize_text(question)
-
-    three_contract_patterns = [
-        "连续签订三次固定期限劳动合同",
-        "连续订立三次固定期限劳动合同",
-        "连续签了三次固定期限劳动合同",
-        "连续签订了三次固定期限劳动合同",
-        "连续订立了三次固定期限劳动合同",
-    ]
-
-    if contains_any(
-        text,
-        three_contract_patterns,
-    ):
-
-        return ContractSequence(
-            count=3,
-            term_type="fixed",
-            continuous=True,
+        facts.append(
+            "劳动者提出订立固定期限劳动合同"
         )
 
-    two_contract_patterns = [
-        "连续签订两次固定期限劳动合同",
-        "连续订立两次固定期限劳动合同",
-        "连续签了两次固定期限劳动合同",
-        "连续签订了两次固定期限劳动合同",
-        "连续订立了两次固定期限劳动合同",
-    ]
+    elif fixed_term_exception is False:
 
-    if contains_any(
-        text,
-        two_contract_patterns,
-    ):
-
-        if has_completed_renewal(text):
-
-            return ContractSequence(
-                count=3,
-                term_type="fixed",
-                continuous=True,
-            )
-
-        later_renewal_patterns = [
-            "后来续订",
-            "后来续签",
-            "之后续订",
-            "之后续签",
-            "又续订",
-            "又续签",
-        ]
-
-        if contains_any(
-            text,
-            later_renewal_patterns,
-        ):
-
-            return ContractSequence(
-                count=3,
-                term_type="fixed",
-                continuous=True,
-            )
-
-        return ContractSequence(
-            count=2,
-            term_type="fixed",
-            continuous=True,
+        facts.append(
+            "劳动者没有提出订立固定期限劳动合同"
         )
 
-    return None
+    # ========================================================
+    # 五、最终去重
+    # ========================================================
+
+    return unique_texts(
+        facts
+    )
 
 
 # ============================================================
@@ -796,7 +513,7 @@ def extract_legal_facts(
     question: str,
 ) -> LegalFacts:
     """
-    V6.1 第二阶段：
+    V6.1：
 
     将现有事实提取结果统一组装成 LegalFacts。
 
@@ -811,6 +528,8 @@ def extract_legal_facts(
         extract_explicit_facts()
         extract_contract_sequence()
         has_completed_renewal()
+        has_worker_agreement()
+        extract_exclusion_facts()
 
     完成。
 
@@ -867,11 +586,33 @@ def extract_legal_facts(
 
         EXCLUSION
         UNKNOWN
+
+    --------------------------------------------------------
+    重要边界
+    --------------------------------------------------------
+
+    本函数不会因为：
+
+        contract_sequence.count >= 3
+
+    自动设置：
+
+        completed_renewal = True
+
+    也不会因为：
+
+        worker_agreement = True
+
+    自动设置：
+
+        completed_renewal = True
+
+    所有事实必须来自用户明确表达。
     """
 
-    # --------------------------------------------------------
+    # ========================================================
     # 第一步：复用已经验证过的事实提取逻辑
-    # --------------------------------------------------------
+    # ========================================================
 
     explicit_facts = extract_explicit_facts(
         question
@@ -881,25 +622,25 @@ def extract_legal_facts(
         question
     )
 
+    # ========================================================
+    # 第二步：已完成续订
+    # ========================================================
+
     completed_renewal = (
         True
         if has_completed_renewal(question)
         else None
     )
 
-    # --------------------------------------------------------
-    # 第二步：从 explicit_facts 读取结构化事实
+    # ========================================================
+    # 第三步：从 explicit_facts 读取 Worker Agreement
     #
     # 注意：
     #
-    # 不重新扫描 question。
+    # 不从 Condition 层反向生成用户事实。
     #
-    # 这样可以保证：
-    #
-    #   extract_explicit_facts()
-    #           ↓
-    #       唯一事实来源
-    # --------------------------------------------------------
+    # explicit_facts 是唯一的汇总事实来源。
+    # ========================================================
 
     worker_agreement = None
 
@@ -910,89 +651,40 @@ def extract_legal_facts(
 
         worker_agreement = True
 
-    # --------------------------------------------------------
-    # Article 39
-    # --------------------------------------------------------
+    # ========================================================
+    # 第四步：排除 / 例外事实
+    #
+    # 这里使用独立事实模块的统一结果。
+    #
+    # 注意：
+    #
+    # 这里不是重新实现识别规则，
+    # 只是读取已经统一识别出的事实结果。
+    # ========================================================
 
-    article_39 = None
+    exclusion_facts = extract_exclusion_facts(
+        question
+    )
 
-    if (
-        "劳动者存在《劳动合同法》第三十九条规定的情形"
-        in explicit_facts
-    ):
+    article_39 = exclusion_facts.get(
+        "article_39"
+    )
 
-        article_39 = True
+    article_40_1 = exclusion_facts.get(
+        "article_40_1"
+    )
 
-    elif (
-        "劳动者不存在《劳动合同法》第三十九条规定的情形"
-        in explicit_facts
-    ):
+    article_40_2 = exclusion_facts.get(
+        "article_40_2"
+    )
 
-        article_39 = False
+    fixed_term_exception = exclusion_facts.get(
+        "fixed_term_exception"
+    )
 
-    # --------------------------------------------------------
-    # Article 40(1)
-    # --------------------------------------------------------
-
-    article_40_1 = None
-
-    if (
-        "劳动者存在《劳动合同法》第四十条第一项规定的情形"
-        in explicit_facts
-    ):
-
-        article_40_1 = True
-
-    elif (
-        "劳动者不存在《劳动合同法》第四十条第一项规定的情形"
-        in explicit_facts
-    ):
-
-        article_40_1 = False
-
-    # --------------------------------------------------------
-    # Article 40(2)
-    # --------------------------------------------------------
-
-    article_40_2 = None
-
-    if (
-        "劳动者存在《劳动合同法》第四十条第二项规定的情形"
-        in explicit_facts
-    ):
-
-        article_40_2 = True
-
-    elif (
-        "劳动者不存在《劳动合同法》第四十条第二项规定的情形"
-        in explicit_facts
-    ):
-
-        article_40_2 = False
-
-    # --------------------------------------------------------
-    # Fixed-Term Exception
-    # --------------------------------------------------------
-
-    fixed_term_exception = None
-
-    if (
-        "劳动者提出订立固定期限劳动合同"
-        in explicit_facts
-    ):
-
-        fixed_term_exception = True
-
-    elif (
-        "劳动者没有提出订立固定期限劳动合同"
-        in explicit_facts
-    ):
-
-        fixed_term_exception = False
-
-    # --------------------------------------------------------
-    # 构造 LegalFacts
-    # --------------------------------------------------------
+    # ========================================================
+    # 第五步：构造 LegalFacts
+    # ========================================================
 
     return LegalFacts(
         explicit_facts=explicit_facts,
@@ -1004,3 +696,60 @@ def extract_legal_facts(
         article_40_2=article_40_2,
         fixed_term_exception=fixed_term_exception,
     )
+
+
+# ============================================================
+# Module Self Test
+# ============================================================
+
+if __name__ == "__main__":
+
+    print("=" * 70)
+    print("RAG V6.1 Legal Fact Extractor Self Test")
+    print("=" * 70)
+
+    test_question = (
+        "公司连续签订三次固定期限劳动合同，"
+        "员工也同意续订，"
+        "不存在劳动合同法第三十九条和第四十条第一项、第二项规定的情形。"
+    )
+
+    print("\n问题：")
+    print(test_question)
+
+    # ========================================================
+    # Explicit Facts
+    # ========================================================
+
+    print("\n【Explicit Facts】")
+
+    explicit_facts = extract_explicit_facts(
+        test_question
+    )
+
+    for index, fact in enumerate(
+        explicit_facts,
+        start=1,
+    ):
+
+        print(
+            f"{index}. {fact}"
+        )
+
+    # ========================================================
+    # LegalFacts
+    # ========================================================
+
+    print("\n【LegalFacts】")
+
+    legal_facts = extract_legal_facts(
+        test_question
+    )
+
+    print(
+        legal_facts.to_dict()
+    )
+
+    print("\n" + "=" * 70)
+    print("Self Test Completed")
+    print("=" * 70)

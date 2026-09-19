@@ -96,10 +96,27 @@ def ensure_list(value: Any) -> List[Any]:
 
     return [value]
 
-
 # ============================================================
 # 文本去重
 # ============================================================
+
+def contains_any(
+    text: str,
+    patterns: List[str],
+) -> bool:
+    """
+    判断文本是否包含任意一个模式。
+
+    统一使用 normalize_text() 进行文本标准化，
+    保证事实提取层与其他法律模块使用一致的文本匹配规则。
+    """
+
+    normalized = normalize_text(text)
+
+    return any(
+        normalize_text(pattern) in normalized
+        for pattern in patterns
+    )
 
 def unique_texts(values: List[Any]) -> List[str]:
     # 保持原始顺序进行文本去重。
