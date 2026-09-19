@@ -274,36 +274,114 @@ def inject_deterministic_condition_analysis(
     将 Decision Engine 的完整 ConditionResult
     确定性注入最终法律分析。
 
-    RAG V6.0-27
+    RAG V6.1
 
-    处理原则：
-
-        LLM 输出
-            ↓
-        删除原有“条件状态”部分
-            ↓
-        插入 Engine 确定性的完整条件状态
-
-    这样可以防止：
-
-    1. LLM 漏掉 SATISFIED 条件；
-    2. LLM 合并多个 EXCLUSION 条件；
-    3. LLM 将 EXCEPTION 当作普通 UNKNOWN；
-    4. LLM 自行改变条件状态；
-    5. LLM 根据自然语言重新解释 Engine 判定。
-
-    注意：
-
-    用户事实由
-        inject_deterministic_user_facts()
-    单独负责。
+    ========================================================
+    单一职责
+    ========================================================
 
     本函数只负责：
-        “条件状态”
+
+        1. 定位【法律分析】章节。
+
+        2. 清理 Ollama 对 Engine User Facts /
+           ConditionResult 的重复解释。
+
+        3. 保留已经由
+           inject_deterministic_user_facts()
+           注入的确定性用户事实。
+
+        4. 插入由
+           build_deterministic_condition_analysis()
+           构造的确定性条件状态。
+
+        5. 保留【法律分析】之后的其他章节。
+
+    ========================================================
+    V6.1 修复原则
+    ========================================================
+
+    【法律分析】中的 User Facts /
+    ConditionResult 属于 Deterministic Data。
+
+    因此：
+
+        Engine
+            ↓
+        User Facts
+            ↓
+        ConditionResult
+            ↓
+        Deterministic Analysis
+
+    Ollama 不拥有这些数据的最终控制权。
+
+    本函数不再尝试逐项猜测 Ollama 的编号标题，
+    而是直接重建【法律分析】中的确定性结构。
+
+    这样可以避免：
+
+        2. **已满足条件**：...
+        3. **待确认条件**：...
+
+    等模型生成内容污染 Deterministic
+    Condition Analysis。
+
+    ========================================================
+    不负责的事项
+    ========================================================
+
+    本函数绝不：
+
+        1. 重新进行法律推理。
+
+        2. 判断任何 ConditionResult。
+
+        3. 修改 Decision Engine 的状态。
+
+        4. 修改 User Facts 的内容。
+
+        5. 修改【结论】。
+
+        6. 修改【法律依据】。
+
+        7. 修改【需要注意】。
+
+        8. 生成新的法律条件。
+
+    ========================================================
+    最终结构
+    ========================================================
+
+        【法律分析】
+
+        1. 用户事实：
+        - xxx
+
+        2. 条件状态：
+        - 条件A：已满足
+        - 条件B：未知
+        - ...
+
+    ========================================================
     """
 
-    if not isinstance(answer, str):
-        answer = str(answer or "")
+    # ========================================================
+    # 1. 参数安全处理
+    # ========================================================
+
+    if not answer:
+        answer = ""
+
+    # ========================================================
+    # 2. 构造 Engine Deterministic Condition Analysis
+    #
+    # 唯一数据来源：
+    #
+    #     Decision Engine
+    #         ↓
+    #     condition_results
+    # ========================================================
 
     deterministic_analysis = (
         build_deterministic_condition_analysis(
@@ -312,133 +390,275 @@ def inject_deterministic_condition_analysis(
     )
 
     # ========================================================
-    # RAG V6.0-27
-    #
-    # 最终答案的章节标题必须使用完整 Marker：
-    #
-    #     【结论】
-    #     【法律依据】
-    #     【法律分析】
-    #     【需要注意】
-    #
-    # 不能只匹配：
-    #
-    #     结论
-    #     法律依据
-    #     法律分析
-    #     需要注意
-    #
-    # 否则正则可能无法识别章节边界，
-    # 导致“条件状态”替换范围一直匹配到文本末尾，
-    # 从而把【需要注意】等后续章节一起删除。
-    # ========================================================
-
-    section_boundary = (
-        r"【(?:结论|法律依据|法律分析|需要注意)】"
-    )
-
-    # ========================================================
-    # 情况 1：
-    #
-    # LLM 输出标准的：
-    #
-    #     2. 条件状态：
-    #
-    # 后面紧接着：
-    #
-    #     【需要注意】
-    #     【法律依据】
-    #     【法律分析】
-    #     【结论】
-    #
-    # 只替换“2. 条件状态”这一段。
-    #
-    # 绝不能吃掉后面的章节。
-    # ========================================================
-
-    condition_pattern = re.compile(
-        r"(?ms)"
-        r"^\s*2\.\s*条件状态\s*：?"
-        r".*?"
-        rf"(?=^\s*(?:3\.\s*)?{section_boundary}|\Z)"
-    )
-
-    if condition_pattern.search(answer):
-        return condition_pattern.sub(
-            deterministic_analysis,
-            answer,
-            count=1,
-        )
-
-    # ========================================================
-    # 情况 2：
-    #
-    # LLM 使用：
-    #
-    #     当前条件状态：
-    #
-    # 或：
-    #
-    #     条件状态：
-    #
-    # 同样只替换这一部分。
-    # ========================================================
-
-    plain_condition_pattern = re.compile(
-        r"(?ms)"
-        r"^\s*(?:当前条件状态|条件状态)\s*：?"
-        r".*?"
-        rf"(?=^\s*{section_boundary}|\Z)"
-    )
-
-    if plain_condition_pattern.search(answer):
-        return plain_condition_pattern.sub(
-            deterministic_analysis,
-            answer,
-            count=1,
-        )
-
-    # ========================================================
-    # 情况 3：
-    #
-    # LLM 没有输出条件状态，
-    # 但存在【法律分析】章节。
-    #
-    # 直接在【法律分析】后面插入确定性的
-    # Condition Analysis。
+    # 3. 定位【法律分析】
     # ========================================================
 
     analysis_header_pattern = re.compile(
-        r"(?m)"
-        r"^\s*【法律分析】\s*$"
+        r"(?m)^\s*【法律分析】\s*$"
     )
 
-    match = analysis_header_pattern.search(answer)
+    analysis_header_match = (
+        analysis_header_pattern.search(answer)
+    )
 
-    if match:
-        insertion_point = match.end()
+    # ========================================================
+    # 4. 如果不存在【法律分析】
+    #
+    # 当前答案没有标准法律分析章节时，
+    # 直接追加 Deterministic Condition Analysis。
+    #
+    # 不虚构 User Facts。
+    # ========================================================
+
+    if not analysis_header_match:
+
+        if answer.strip():
+
+            return (
+                answer.rstrip()
+                + "\n\n"
+                + "【法律分析】"
+                + "\n\n"
+                + deterministic_analysis
+            )
 
         return (
-            answer[:insertion_point]
-            + "\n"
+            "【法律分析】\n\n"
             + deterministic_analysis
-            + answer[insertion_point:]
         )
 
     # ========================================================
-    # 情况 4：
+    # 5. 定位【法律分析】之后的下一个标准章节
     #
-    # 连【法律分析】都不存在。
+    # 只识别完整章节 Marker：
     #
-    # 为了保证后续 Validation 可以继续处理，
-    # 将确定性的条件分析追加到答案末尾。
+    #     【结论】
+    #     【法律依据】
+    #     【法律分析】
+    #     【需要注意】
+    #
+    # 不使用：
+    #
+    #     【[^】]+】
+    #
+    # 避免普通中文文本中的括号
+    # 被误认为章节边界。
     # ========================================================
 
-    if answer.strip():
-        return (
-            answer.rstrip()
-            + "\n\n"
-            + deterministic_analysis
+    section_header_pattern = re.compile(
+        r"(?m)^\s*【(?:结论|法律依据|法律分析|需要注意)】\s*$"
+    )
+
+    next_section_match = None
+
+    for match in section_header_pattern.finditer(
+        answer,
+        analysis_header_match.end(),
+    ):
+
+        if match.start() > analysis_header_match.end():
+
+            next_section_match = match
+
+            break
+
+    # ========================================================
+    # 6. 拆分完整答案
+    #
+    # prefix：
+    #
+    #     【结论】
+    #     【法律依据】
+    #     ...
+    #
+    # analysis_body：
+    #
+    #     【法律分析】之后的原始内容
+    #
+    # suffix：
+    #
+    #     【需要注意】
+    #     以及之后的内容
+    # ========================================================
+
+    if next_section_match:
+
+        prefix = answer[
+            :analysis_header_match.end()
+        ]
+
+        analysis_body = answer[
+            analysis_header_match.end():
+            next_section_match.start()
+        ]
+
+        suffix = answer[
+            next_section_match.start():
+        ]
+
+    else:
+
+        prefix = answer[
+            :analysis_header_match.end()
+        ]
+
+        analysis_body = answer[
+            analysis_header_match.end():
+        ]
+
+        suffix = ""
+
+    # ========================================================
+    # 7. 提取已经注入的 Deterministic User Facts
+    #
+    # --------------------------------------------------------
+    # 正常结构：
+    #
+    #     1. 用户事实：
+    #     - 公司连续签订三次固定期限劳动合同
+    #
+    # 这里只提取已经存在的 Deterministic
+    # User Facts，不从 Ollama 重新推断事实。
+    #
+    # --------------------------------------------------------
+    # 如果不存在 Deterministic User Facts：
+    #
+    #     不虚构新的 User Facts。
+    # ========================================================
+
+    deterministic_user_fact_pattern = re.compile(
+        r"(?ms)"
+        r"^\s*1\.\s*用户事实\s*：?"
+        r"(.*?)"
+        r"(?=^\s*2\.\s+|\Z)"
+    )
+
+    user_fact_match = (
+        deterministic_user_fact_pattern.search(
+            analysis_body
+        )
+    )
+
+    deterministic_user_fact_section = ""
+
+    if user_fact_match:
+
+        user_fact_content = (
+            user_fact_match.group(1).strip()
         )
 
-    return deterministic_analysis
+        if user_fact_content:
+
+            deterministic_user_fact_section = (
+                "1. 用户事实：\n"
+                + user_fact_content
+            )
+
+    # ========================================================
+    # 8. 重新构建【法律分析】
+    #
+    # ========================================================
+    #
+    # 关键修复：
+    #
+    # 不再对 Ollama 原有 analysis_body
+    # 做局部删除。
+    #
+    # 直接丢弃整个 Ollama Analysis Body，
+    # 只保留：
+    #
+    #     A. Deterministic User Facts
+    #
+    #     B. Deterministic Condition Analysis
+    #
+    # 这样可以彻底消除：
+    #
+    #     2. **已满足条件**：...
+    #
+    #     3. **待确认条件**：...
+    #
+    #     1. **xxx**
+    #
+    #     2. 条件状态……
+    #
+    #     未知2.
+    #
+    # 等模型格式污染。
+    # ========================================================
+
+    analysis_parts = []
+
+    if deterministic_user_fact_section:
+
+        analysis_parts.append(
+            deterministic_user_fact_section
+        )
+
+    if deterministic_analysis:
+
+        analysis_parts.append(
+            deterministic_analysis
+        )
+
+    rebuilt_body = "\n\n".join(
+        part.strip()
+        for part in analysis_parts
+        if part and part.strip()
+    ).strip()
+
+    # ========================================================
+    # 9. 如果没有任何 Deterministic Analysis
+    #
+    # 极端情况下保留原始 analysis_body，
+    # 防止函数无故删除用户内容。
+    #
+    # 正常 Legal RAG Pipeline 不应进入这里。
+    # ========================================================
+
+    if not rebuilt_body:
+
+        rebuilt_body = (
+            analysis_body.strip()
+        )
+
+    # ========================================================
+    # 10. 重建完整答案
+    #
+    # prefix
+    #     +
+    # 【法律分析】
+    #     +
+    # Deterministic Analysis
+    #     +
+    # suffix
+    #
+    # suffix 完全保持原有章节内容。
+    # ========================================================
+
+    result = (
+        prefix.rstrip()
+        + "\n\n"
+        + rebuilt_body
+    )
+
+    if suffix:
+
+        result += (
+            "\n\n"
+            + suffix.lstrip()
+        )
+
+    # ========================================================
+    # 11. 最终空白清理
+    #
+    # 不修改任何文字内容，
+    # 只压缩连续空行。
+    # ========================================================
+
+    result = re.sub(
+        r"\n[ \t]*\n[ \t]*\n+",
+        "\n\n",
+        result,
+    )
+
+    return result.strip()

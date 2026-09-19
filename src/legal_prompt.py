@@ -9,21 +9,51 @@ Legal Prompt Builder
 
 from typing import Any, Dict, List
 
-
 def build_deterministic_engine_state_block(
     decision: Dict[str, Any],
 ) -> str:
     """
-    RAG V6.0-27
+    RAG V6.1
     构建确定性的 Engine 状态块。
 
     核心原则：
 
     1. Engine 是唯一法律条件判定来源。
-    2. UNKNOWN 必须 1:1 保留。
-    3. 已触发 EXCLUSION 必须 1:1 保留。
-    4. 已触发 EXCEPTION 必须 1:1 保留。
-    5. Ollama 不得修改这些内容。
+    2. SATISFIED 必须 1:1 保留。
+    3. UNKNOWN 必须 1:1 保留。
+    4. NOT_SATISFIED 必须 1:1 保留。
+    5. 已触发 EXCLUSION 必须 1:1 保留。
+    6. 已触发 EXCEPTION 必须 1:1 保留。
+    7. Ollama 不得修改这些内容。
+
+    V6.1 修复：
+
+    原版本只输出：
+
+        Engine Decision
+        UNKNOWN
+        Triggered EXCLUSION
+        Triggered EXCEPTION
+
+    没有在 ENGINE DETERMINISTIC STATE 中输出
+    SATISFIED / NOT_SATISFIED。
+
+    这会导致：
+
+        Engine Decision = CONDITIONAL
+        SATISFIED = 2
+        UNKNOWN = 6
+
+    中的 SATISFIED 状态没有进入最终状态锁定区。
+
+    V6.1 将三种 ConditionResult 状态完整输出，
+    使 ENGINE DETERMINISTIC STATE 成为真正的
+    Engine 状态快照。
+
+    注意：
+
+    本函数只读取 DecisionResult，
+    不重新进行任何法律判断。
     """
 
     def _condition_text(item: Any) -> str:
@@ -50,10 +80,44 @@ def build_deterministic_engine_state_block(
             )
         )
 
+    # ========================================================
+    # Engine Decision
+    # ========================================================
+
+    engine_decision = decision.get(
+        "engine_decision",
+        decision.get(
+            "decision",
+            "UNKNOWN",
+        ),
+    )
+
+    # ========================================================
+    # Condition Status
+    #
+    # 直接读取 Engine 已经产生的结构化结果。
+    #
+    # 不在 Prompt 层重新计算条件状态。
+    # ========================================================
+
+    satisfied_conditions = decision.get(
+        "satisfied_conditions",
+        [],
+    ) or []
+
     unknown_conditions = decision.get(
         "unknown_conditions",
         [],
     ) or []
+
+    not_satisfied_conditions = decision.get(
+        "not_satisfied_conditions",
+        [],
+    ) or []
+
+    # ========================================================
+    # Triggered Exclusions / Exceptions
+    # ========================================================
 
     triggered_exclusion_conditions = decision.get(
         "triggered_exclusion_conditions",
@@ -64,14 +128,6 @@ def build_deterministic_engine_state_block(
         "triggered_exception_conditions",
         [],
     ) or []
-
-    engine_decision = decision.get(
-        "engine_decision",
-        decision.get(
-            "decision",
-            "UNKNOWN",
-        ),
-    )
 
     lines = []
 
@@ -89,13 +145,44 @@ def build_deterministic_engine_state_block(
         f"Engine Decision：{engine_decision}"
     )
 
-    # --------------------------------------------------------
-    # UNKNOWN
-    # --------------------------------------------------------
+    # ========================================================
+    # SATISFIED
+    # ========================================================
 
     lines.append("")
     lines.append(
-        f"UNKNOWN 条件数量：{len(unknown_conditions)}"
+        f"SATISFIED 条件数量："
+        f"{len(satisfied_conditions)}"
+    )
+
+    if satisfied_conditions:
+
+        lines.append(
+            "【必须逐项保留的 SATISFIED 条件】"
+        )
+
+        for index, condition in enumerate(
+            satisfied_conditions,
+            start=1,
+        ):
+            lines.append(
+                f"{index}. {_condition_text(condition)}"
+            )
+
+    else:
+
+        lines.append(
+            "无 SATISFIED 条件。"
+        )
+
+    # ========================================================
+    # UNKNOWN
+    # ========================================================
+
+    lines.append("")
+    lines.append(
+        f"UNKNOWN 条件数量："
+        f"{len(unknown_conditions)}"
     )
 
     if unknown_conditions:
@@ -118,9 +205,39 @@ def build_deterministic_engine_state_block(
             "无 UNKNOWN 条件。"
         )
 
-    # --------------------------------------------------------
+    # ========================================================
+    # NOT_SATISFIED
+    # ========================================================
+
+    lines.append("")
+    lines.append(
+        f"NOT_SATISFIED 条件数量："
+        f"{len(not_satisfied_conditions)}"
+    )
+
+    if not_satisfied_conditions:
+
+        lines.append(
+            "【必须逐项保留的 NOT_SATISFIED 条件】"
+        )
+
+        for index, condition in enumerate(
+            not_satisfied_conditions,
+            start=1,
+        ):
+            lines.append(
+                f"{index}. {_condition_text(condition)}"
+            )
+
+    else:
+
+        lines.append(
+            "无 NOT_SATISFIED 条件。"
+        )
+
+    # ========================================================
     # Triggered Exclusions
-    # --------------------------------------------------------
+    # ========================================================
 
     lines.append("")
     lines.append(
@@ -148,9 +265,9 @@ def build_deterministic_engine_state_block(
             "无已经触发的 EXCLUSION。"
         )
 
-    # --------------------------------------------------------
+    # ========================================================
     # Triggered Exceptions
-    # --------------------------------------------------------
+    # ========================================================
 
     lines.append("")
     lines.append(
