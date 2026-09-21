@@ -1533,55 +1533,27 @@ def adapt_decision_for_answer_builder(
 
 
 # ============================================================
-# Answer Formatting
+# Compatibility View Adapters
 # ============================================================
 
 def _format_contract_sequence(
     sequence: Dict[str, Any],
 ) -> str:
     """
-    将合同序列转换成展示文本。
+    Builder 兼容接口。
+
+    实际展示逻辑已经移动到：
+
+        src/legal_answer_views.py
     """
 
-    if not sequence:
-        return ""
-
-    count = sequence.get(
-        "count",
-        0,
+    from src.legal_answer_views import (
+        format_contract_sequence,
     )
 
-    term_type = safe_text(
-        sequence.get(
-            "term_type",
-            "",
-        )
+    return format_contract_sequence(
+        sequence
     )
-
-    continuous = sequence.get(
-        "continuous",
-        False,
-    )
-
-    parts = []
-
-    if count:
-        parts.append(
-            f"合同次数={count}"
-        )
-
-    if term_type:
-        parts.append(
-            f"期限类型={term_type}"
-        )
-
-    parts.append(
-        "连续=True"
-        if continuous
-        else "连续=False"
-    )
-
-    return "；".join(parts)
 
 
 def _format_condition_group(
@@ -1589,43 +1561,45 @@ def _format_condition_group(
     conditions: List[str],
 ) -> List[str]:
     """
-    格式化条件组。
+    Builder 兼容接口。
+
+    实际展示逻辑已经移动到：
+
+        src/legal_answer_views.py
     """
 
-    lines = [
-        title
-    ]
+    from src.legal_answer_views import (
+        format_condition_group,
+    )
 
-    if not conditions:
-        lines.append(
-            "  - 无"
-        )
-        return lines
+    return format_condition_group(
+        title,
+        conditions,
+    )
 
-    for condition in conditions:
-        lines.append(
-            f"  - {condition}"
-        )
-
-    return lines
-
-
-# ============================================================
-# Plain Answer Builder
-# ============================================================
 
 def build_plain_answer(
     structured_answer: Any,
 ) -> str:
     """
-    将 StructuredAnswer 转换成适合 Ollama
-    使用的纯文本结构。
+    Builder 兼容接口。
 
-    注意：
+    保留原有：
 
-    这里仍然不进行法律推理。
+        legal_answer_builder.build_plain_answer()
 
-    所有状态来自 StructuredAnswer。
+    调用方式不变。
+
+    如果传入的是 DecisionResult，
+    仍然由 Builder Core 完成：
+
+        DecisionResult
+            ↓
+        StructuredAnswer
+
+    然后交给 Views 层进行展示。
+
+    Views 层本身不进行法律转换。
     """
 
     if not isinstance(
@@ -1636,250 +1610,22 @@ def build_plain_answer(
             structured_answer
         )
 
-    lines: List[str] = []
-
-    lines.append(
-        f"Legal Answer Builder {BUILDER_VERSION}"
+    from src.legal_answer_views import (
+        build_plain_answer as _build_plain_answer_view,
     )
 
-    lines.append(
-        ""
+    return _build_plain_answer_view(
+        structured_answer
     )
 
-    lines.append(
-        "【Decision】"
-    )
-
-    lines.append(
-        safe_text(
-            structured_answer.decision
-        )
-    )
-
-    lines.append(
-        ""
-    )
-
-    lines.append(
-        "【用户明确事实】"
-    )
-
-    if structured_answer.user_facts:
-        for fact in (
-            structured_answer.user_facts
-        ):
-            lines.append(
-                f"- {fact}"
-            )
-    else:
-        lines.append(
-            "- 未提供明确事实"
-        )
-
-    lines.append(
-        ""
-    )
-
-    sequence_text = (
-        _format_contract_sequence(
-            structured_answer.contract_sequence
-        )
-    )
-
-    if sequence_text:
-        lines.append(
-            "【合同序列】"
-        )
-        lines.append(
-            sequence_text
-        )
-        lines.append(
-            ""
-        )
-
-    lines.extend(
-        _format_condition_group(
-            "【满足条件】",
-            structured_answer.satisfied_conditions,
-        )
-    )
-
-    lines.append(
-        ""
-    )
-
-    lines.extend(
-        _format_condition_group(
-            "【未知条件】",
-            structured_answer.unknown_conditions,
-        )
-    )
-
-    lines.append(
-        ""
-    )
-
-    lines.extend(
-        _format_condition_group(
-            "【未满足条件】",
-            structured_answer.not_satisfied_conditions,
-        )
-    )
-
-    lines.append(
-        ""
-    )
-
-    lines.extend(
-        _format_condition_group(
-            "【REQUIRED 条件】",
-            structured_answer.required_conditions,
-        )
-    )
-
-    lines.append(
-        ""
-    )
-
-    lines.extend(
-        _format_condition_group(
-            "【EXCLUSION 条件】",
-            structured_answer.exclusion_conditions,
-        )
-    )
-
-    lines.append(
-        ""
-    )
-
-    lines.extend(
-        _format_condition_group(
-            "【EXCEPTION 条件】",
-            structured_answer.exception_conditions,
-        )
-    )
-
-    lines.append(
-        ""
-    )
-
-    lines.append(
-        "【完整 ConditionResult】"
-    )
-
-    for item in (
-        structured_answer.condition_results
-    ):
-        lines.append(
-            f"- [{item.condition_type}] "
-            f"{item.status}: "
-            f"{item.condition}"
-        )
-
-        if item.reason:
-            lines.append(
-                f"  Reason: {item.reason}"
-            )
-
-    lines.append(
-        ""
-    )
-
-    lines.append(
-        "【法律规则】"
-    )
-
-    if structured_answer.legal_rules:
-        for rule in (
-            structured_answer.legal_rules
-        ):
-            lines.append(
-                f"- {rule}"
-            )
-    else:
-        lines.append(
-            "- 未提供"
-        )
-
-    lines.append(
-        ""
-    )
-
-    lines.append(
-        "【Selected Rule】"
-    )
-
-    if structured_answer.selected_rule:
-        lines.append(
-            structured_answer.selected_rule
-        )
-    else:
-        lines.append(
-            "未提供"
-        )
-
-    lines.append(
-        ""
-    )
-
-    lines.append(
-        "【Decision Engine Explanation】"
-    )
-
-    if structured_answer.explanation:
-        lines.append(
-            structured_answer.explanation
-        )
-    else:
-        lines.append(
-            "未提供"
-        )
-
-    lines.append(
-        ""
-    )
-
-    lines.append(
-        "【Engine Version】"
-    )
-
-    lines.append(
-        structured_answer.engine_version
-        or "UNKNOWN"
-    )
-
-    lines.append(
-        ""
-    )
-
-    lines.append(
-        "【Builder Version】"
-    )
-
-    lines.append(
-        structured_answer.builder_version
-    )
-
-    return "\n".join(
-        lines
-    )
-
-
-# ============================================================
-# Ollama Context
-# ============================================================
 
 def build_answer_context(
     structured_answer: Any,
 ) -> Dict[str, Any]:
     """
-    构建 Ollama 可以使用的结构化 Context。
+    Builder 兼容接口。
 
-    目的：
-
-        让 LLM 只能基于 Engine 已经确定的信息回答。
-
-    不在这里进行法律判断。
+    保留原有外部调用方式。
     """
 
     if not isinstance(
@@ -1890,92 +1636,22 @@ def build_answer_context(
             structured_answer
         )
 
-    return {
-        "decision":
-            structured_answer.decision,
+    from src.legal_answer_views import (
+        build_answer_context as _build_answer_context_view,
+    )
 
-        "user_facts":
-            list(
-                structured_answer.user_facts
-            ),
+    return _build_answer_context_view(
+        structured_answer
+    )
 
-        "satisfied_conditions":
-            list(
-                structured_answer.satisfied_conditions
-            ),
-
-        "unknown_conditions":
-            list(
-                structured_answer.unknown_conditions
-            ),
-
-        "not_satisfied_conditions":
-            list(
-                structured_answer.not_satisfied_conditions
-            ),
-
-        "required_conditions":
-            list(
-                structured_answer.required_conditions
-            ),
-
-        "exclusion_conditions":
-            list(
-                structured_answer.exclusion_conditions
-            ),
-
-        "exception_conditions":
-            list(
-                structured_answer.exception_conditions
-            ),
-
-        "contract_sequence":
-            dict(
-                structured_answer.contract_sequence
-            ),
-
-        "legal_rules":
-            list(
-                structured_answer.legal_rules
-            ),
-
-        "selected_rule":
-            structured_answer.selected_rule,
-
-        "explanation":
-            structured_answer.explanation,
-
-        "condition_results": [
-            item.to_dict()
-            for item in (
-                structured_answer.condition_results
-            )
-        ],
-
-        "engine_version":
-            structured_answer.engine_version,
-
-        "builder_version":
-            structured_answer.builder_version,
-    }
-
-
-# ============================================================
-# Prompt Context
-# ============================================================
 
 def build_prompt_context(
     structured_answer: Any,
 ) -> str:
     """
-    构建 Ollama Prompt Context。
+    Builder 兼容接口。
 
-    该 Context 明确要求模型：
-
-        1. 不重新推理 Condition
-        2. 不改变 Decision
-        3. 不把 UNKNOWN 写成确定事实
-        4. 不增加不存在的事实
+    保留原有外部调用方式。
     """
 
     if not isinstance(
@@ -1986,41 +1662,22 @@ def build_prompt_context(
             structured_answer
         )
 
-    plain_answer = build_plain_answer(
+    from src.legal_answer_views import (
+        build_prompt_context as _build_prompt_context_view,
+    )
+
+    return _build_prompt_context_view(
         structured_answer
     )
 
-    return (
-        "以下内容来自 Legal Decision Engine "
-        "和 Legal Answer Builder。\n"
-        "回答时必须严格遵守结构化法律状态，"
-        "不得重新创造事实或修改法律条件。\n\n"
-        "特别要求：\n"
-        "1. 用户事实与法律规则条件必须区分。\n"
-        "2. SATISFIED 必须保持为已满足。\n"
-        "3. UNKNOWN 必须保持为未知，"
-        "不能擅自变成已满足或不满足。\n"
-        "4. NOT_SATISFIED 必须保持为未满足。\n"
-        "5. CONDITIONAL 必须保持为条件性结论。\n"
-        "6. 不得因为合同次数而自动推定所有法律条件成立。\n"
-        "7. 不得增加 Decision Engine 没有提供的事实。\n\n"
-        "================ STRUCTURED ANSWER "
-        "================\n"
-        f"{plain_answer}\n"
-        "================ END STRUCTURED ANSWER "
-        "================"
-    )
-
-
-# ============================================================
-# Debug Summary
-# ============================================================
 
 def summarize_structured_answer(
     structured_answer: Any,
 ) -> str:
     """
-    输出简洁调试摘要。
+    Builder 兼容接口。
+
+    保留原有外部调用方式。
     """
 
     if not isinstance(
@@ -2031,45 +1688,14 @@ def summarize_structured_answer(
             structured_answer
         )
 
-    total = len(
-        structured_answer.condition_results
+    from src.legal_answer_views import (
+        summarize_structured_answer
+        as _summarize_structured_answer_view,
     )
 
-    required_count = len(
-        structured_answer.required_conditions
+    return _summarize_structured_answer_view(
+        structured_answer
     )
-
-    exclusion_count = len(
-        structured_answer.exclusion_conditions
-    )
-
-    exception_count = len(
-        structured_answer.exception_conditions
-    )
-
-    lines = [
-        "Structured Answer Summary",
-        "=" * 60,
-        f"Decision: {structured_answer.decision}",
-        f"User Facts: "
-        f"{len(structured_answer.user_facts)}",
-        f"Condition Results: {total}",
-        f"REQUIRED: {required_count}",
-        f"EXCLUSION: {exclusion_count}",
-        f"EXCEPTION: {exception_count}",
-        f"Satisfied: "
-        f"{len(structured_answer.satisfied_conditions)}",
-        f"Unknown: "
-        f"{len(structured_answer.unknown_conditions)}",
-        f"Not Satisfied: "
-        f"{len(structured_answer.not_satisfied_conditions)}",
-        f"Engine Version: "
-        f"{structured_answer.engine_version}",
-        f"Builder Version: "
-        f"{structured_answer.builder_version}",
-    ]
-
-    return "\n".join(lines)
 
 
 # ============================================================

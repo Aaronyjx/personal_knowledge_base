@@ -198,22 +198,10 @@ def run_decision_engine(
         f"Rules：{len(rules)}"
     )
 
-    try:
-
-        decision = make_decision(
-            question=question,
-            rules=rules,
-        )
-
-    except TypeError:
-
-        # 兼容部分旧版 Decision Engine
-        # 可能使用位置参数。
-
-        decision = make_decision(
-            question,
-            rules,
-        )
+    decision = make_decision(
+        question=question,
+        retrieved_articles=rules,
+    )
 
     status = extract_engine_decision(
         decision

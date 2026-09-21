@@ -27,6 +27,8 @@ RAG V5.1
 
 from pathlib import Path
 import hashlib
+
+from qdrant_client.models import PointStruct
 import re
 import sys
 import time
@@ -74,7 +76,7 @@ from src.embedding import (
 
 from src.vector_store import (
     ensure_collection,
-    upsert_documents,
+    upsert_points,
     make_point_id,
 )
 
@@ -1159,8 +1161,17 @@ def process_file(
 
     try:
 
-        written = upsert_documents(
-            documents
+        points = [
+            PointStruct(
+                id=document["id"],
+                vector=document["vector"],
+                payload=document["payload"],
+            )
+            for document in documents
+        ]
+
+        written = upsert_points(
+            points
         )
 
     except Exception as e:

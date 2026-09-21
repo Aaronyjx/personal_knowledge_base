@@ -1306,7 +1306,7 @@ def run_regression_tests() -> None:
                     SATISFIED,
 
                 "劳动者提出订立固定期限劳动合同":
-                    SATISFIED,
+                    NOT_SATISFIED,
             },
         },
 
@@ -1347,7 +1347,7 @@ def run_regression_tests() -> None:
                     SATISFIED,
 
                 "劳动者存在《劳动合同法》第三十九条规定的情形":
-                    NOT_SATISFIED,
+                    SATISFIED,
             },
         },
 
@@ -1479,7 +1479,7 @@ def run_regression_tests() -> None:
                     SATISFIED,
 
                 "劳动者提出订立固定期限劳动合同":
-                    NOT_SATISFIED,
+                    SATISFIED,
             },
         },
 
@@ -1514,16 +1514,16 @@ def run_regression_tests() -> None:
                     SATISFIED,
 
                 "劳动者存在《劳动合同法》第三十九条规定的情形":
-                    SATISFIED,
+                    NOT_SATISFIED,
 
                 "劳动者存在《劳动合同法》第四十条第一项规定的情形":
-                    SATISFIED,
+                    NOT_SATISFIED,
 
                 "劳动者存在《劳动合同法》第四十条第二项规定的情形":
-                    SATISFIED,
+                    NOT_SATISFIED,
 
                 "劳动者提出订立固定期限劳动合同":
-                    SATISFIED,
+                    NOT_SATISFIED,
             },
         },
     ]
@@ -1591,36 +1591,85 @@ def run_regression_tests() -> None:
                     "Scenario K 必须包含 8 个条件。"
                 )
 
-                assert (
-                    len(
-                        decision.satisfied_conditions
-                    )
-                    == 8
-                ), (
-                    "Scenario K 必须全部 SATISFIED。"
+                # ------------------------------------------------
+                # V6.1 语义：
+                #
+                # REQUIRED：
+                #   4 条全部 SATISFIED
+                #
+                # EXCLUSION：
+                #   3 条全部 NOT_SATISFIED
+                #   表示排除条件均未触发
+                #
+                # EXCEPTION：
+                #   1 条 NOT_SATISFIED
+                #   表示例外条件未触发
+                #
+                # 因此：
+                #   UNKNOWN = 0
+                #   阻断条件 = 0
+                #   Decision = DEFINITE
+                # ------------------------------------------------
+
+                required_satisfied = [
+                    item
+                    for item in decision.condition_results
+                    if item.condition_type == "REQUIRED"
+                    and item.status == SATISFIED
+                ]
+
+                exclusion_not_satisfied = [
+                    item
+                    for item in decision.condition_results
+                    if item.condition_type == "EXCLUSION"
+                    and item.status == NOT_SATISFIED
+                ]
+
+                exception_not_satisfied = [
+                    item
+                    for item in decision.condition_results
+                    if item.condition_type == "EXCEPTION"
+                    and item.status == NOT_SATISFIED
+                ]
+
+                assert len(required_satisfied) == 4, (
+                    "Scenario K 的 4 个 REQUIRED 条件必须全部 SATISFIED。"
+                )
+
+                assert len(exclusion_not_satisfied) == 3, (
+                    "Scenario K 的 3 个 EXCLUSION 条件必须全部 NOT_SATISFIED。"
+                )
+
+                assert len(exception_not_satisfied) == 1, (
+                    "Scenario K 的 EXCEPTION 条件必须为 NOT_SATISFIED。"
                 )
 
                 assert (
-                    len(
-                        decision.unknown_conditions
-                    )
-                    == 0
+                    len(decision.unknown_conditions) == 0
                 ), (
                     "Scenario K 不允许存在 UNKNOWN。"
                 )
 
                 assert (
-                    len(
-                        decision.not_satisfied_conditions
-                    )
-                    == 0
+                    len(decision.required_not_satisfied_conditions) == 0
                 ), (
-                    "Scenario K 不允许存在 NOT_SATISFIED。"
+                    "Scenario K 不允许 REQUIRED NOT_SATISFIED。"
                 )
 
                 assert (
-                    decision.decision
-                    == DEFINITE
+                    len(decision.triggered_exclusion_conditions) == 0
+                ), (
+                    "Scenario K 不允许触发 EXCLUSION。"
+                )
+
+                assert (
+                    len(decision.triggered_exception_conditions) == 0
+                ), (
+                    "Scenario K 不允许触发 EXCEPTION。"
+                )
+
+                assert (
+                    decision.decision == DEFINITE
                 ), (
                     "Scenario K 必须输出 DEFINITE。"
                 )
@@ -1650,11 +1699,36 @@ def run_regression_tests() -> None:
 
             if expected_decision == NOT_ESTABLISHED:
 
+                # ========================================================
+                # V6.1 Blocking Condition Consistency
+                #
+                # NOT_ESTABLISHED 有三种合法来源：
+                #
+                # 1. REQUIRED NOT_SATISFIED
+                # 2. EXCLUSION SATISFIED
+                # 3. EXCEPTION SATISFIED
+                #
+                # 因此不能再要求：
+                #
+                #     decision.not_satisfied_conditions > 0
+                #
+                # 因为 EXCLUSION / EXCEPTION 的阻断条件，
+                # 分别通过 triggered_exclusion_conditions /
+                # triggered_exception_conditions 表示。
+                # ========================================================
+
                 assert (
                     len(
-                        decision.not_satisfied_conditions
-                    )
-                    > 0
+                        decision.required_not_satisfied_conditions
+                    ) > 0
+                    or
+                    len(
+                        decision.triggered_exclusion_conditions
+                    ) > 0
+                    or
+                    len(
+                        decision.triggered_exception_conditions
+                    ) > 0
                 )
 
             print(

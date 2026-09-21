@@ -1742,6 +1742,118 @@ def build_fallback_answer(
             )
 
     # --------------------------------------------------------
+    # 尚未确认的 EXCLUSION / EXCEPTION
+    #
+    # 注意：
+    #
+    # decision["unknown_conditions"]
+    # 只保存 REQUIRED UNKNOWN。
+    #
+    # 因此 EXCLUSION / EXCEPTION 的 UNKNOWN
+    # 必须直接从正式的 ConditionResult 中提取。
+    #
+    # 这里只做展示分类，不重新进行法律推理。
+    # --------------------------------------------------------
+
+    exclusion_unknown_conditions = []
+
+    for item in exclusion_results:
+
+        if not isinstance(item, dict):
+            continue
+
+        condition = normalize_text(
+            item.get(
+                "condition",
+                "",
+            )
+        )
+
+        status = normalize_text(
+            item.get(
+                "status",
+                "UNKNOWN",
+            )
+        ).upper()
+
+        if (
+            condition
+            and status == "UNKNOWN"
+        ):
+            exclusion_unknown_conditions.append(
+                condition
+            )
+
+    exclusion_unknown_conditions = unique_texts(
+        exclusion_unknown_conditions
+    )
+
+    exception_unknown_conditions = []
+
+    for item in exception_results:
+
+        if not isinstance(item, dict):
+            continue
+
+        condition = normalize_text(
+            item.get(
+                "condition",
+                "",
+            )
+        )
+
+        status = normalize_text(
+            item.get(
+                "status",
+                "UNKNOWN",
+            )
+        ).upper()
+
+        if (
+            condition
+            and status == "UNKNOWN"
+        ):
+            exception_unknown_conditions.append(
+                condition
+            )
+
+    exception_unknown_conditions = unique_texts(
+        exception_unknown_conditions
+    )
+
+    # --------------------------------------------------------
+    # 尚未确认的排除条件
+    # --------------------------------------------------------
+
+    if exclusion_unknown_conditions:
+
+        analysis_lines.append(
+            "尚未确认的排除条件："
+        )
+
+        for item in exclusion_unknown_conditions:
+
+            analysis_lines.append(
+                f"- {item}"
+            )
+
+    # --------------------------------------------------------
+    # 尚未确认的例外条件
+    # --------------------------------------------------------
+
+    if exception_unknown_conditions:
+
+        analysis_lines.append(
+            "尚未确认的例外条件："
+        )
+
+        for item in exception_unknown_conditions:
+
+            analysis_lines.append(
+                f"- {item}"
+            )
+
+    # --------------------------------------------------------
     # 6. 尚未确认条件
     #
     # 注意：

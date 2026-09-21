@@ -1,4 +1,4 @@
-from pdf_loader import load_pdf
+from src.pdf_loader import load_pdf
 
 
 def split_text(text, chunk_size=800, chunk_overlap=100):
