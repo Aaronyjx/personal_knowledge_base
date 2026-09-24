@@ -63,6 +63,7 @@ from src.legal_rule_definition import (
     LABOR_CONTRACT_LAW_ARTICLE_14,
     REQUIRED_CONDITIONS,
 )
+from src.legal_rule_registry import get_rule
 
 
 # ============================================================
@@ -93,9 +94,11 @@ def build_core_rule() -> Dict[str, Any]:
     构建《劳动合同法》第十四条核心规则。
     """
 
+    canonical_rule = get_rule(RULE_ID)
+
     return {
-        "rule_id": RULE_ID,
-        "law_name": LABOR_CONTRACT_LAW,
+        "rule_id": canonical_rule["rule_id"],
+        "law_name": canonical_rule["law_name"],
 
         "article": LABOR_CONTRACT_LAW_ARTICLE_14,
 
@@ -112,15 +115,15 @@ def build_core_rule() -> Dict[str, Any]:
         ),
 
         "conditions": list(
-            REQUIRED_CONDITIONS
+            canonical_rule["conditions"]
         ),
 
         "exclusion_conditions": list(
-            EXCLUSION_CONDITIONS
+            canonical_rule["exclusion_conditions"]
         ),
 
         "exceptions": list(
-            EXCEPTION_CONDITIONS
+            canonical_rule["exceptions"]
         ),
 
         "priority": "ARTICLE_14",
