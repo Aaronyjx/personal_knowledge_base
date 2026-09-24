@@ -74,6 +74,8 @@ from typing import Any, Dict
 # 基础法律身份
 # ============================================================
 
+RULE_ID = "RULE-001"
+
 LABOR_CONTRACT_LAW = "中华人民共和国劳动合同法"
 
 LABOR_CONTRACT_LAW_ARTICLE_14 = "第十四条"
@@ -188,6 +190,7 @@ def build_article_14_definition() -> Dict[str, Any]:
     """
 
     return {
+        "rule_id": RULE_ID,
         "law_name": LABOR_CONTRACT_LAW,
         "article_number": LABOR_CONTRACT_LAW_ARTICLE_14,
 

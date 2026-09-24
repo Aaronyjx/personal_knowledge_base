@@ -56,6 +56,7 @@ from typing import Any, Dict
 from src.legal_rule_definition import (
     ALL_CONDITIONS,
     EXCEPTION_CONDITIONS,
+    RULE_ID,
     EXCLUSION_CONDITIONS,
     IMPLEMENTING_REGULATIONS,
     LABOR_CONTRACT_LAW,
@@ -93,6 +94,7 @@ def build_core_rule() -> Dict[str, Any]:
     """
 
     return {
+        "rule_id": RULE_ID,
         "law_name": LABOR_CONTRACT_LAW,
 
         "article": LABOR_CONTRACT_LAW_ARTICLE_14,
