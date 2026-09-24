@@ -188,9 +188,6 @@ from src.legal_common import (
 
 from src.legal_decision_rules import (
     ALL_CONDITIONS,
-    EXCEPTION_CONDITIONS,
-    EXCLUSION_CONDITIONS,
-    REQUIRED_CONDITIONS,
     LABOR_CONTRACT_LAW,
     build_core_rule,
 )
@@ -1377,8 +1374,19 @@ def evaluate_rule(
     # --------------------------------------------------------
     # REQUIRED
     # --------------------------------------------------------
+    #
+    # Canonical Rule 已由调用方通过 Rule Registry
+    # → build_core_rule()
+    # → select_core_rule()
+    # 传入此处。
+    #
+    # evaluate_rule() 不再直接依赖独立条件常量。
+    # --------------------------------------------------------
 
-    for condition in REQUIRED_CONDITIONS:
+    for condition in rule.get(
+        "conditions",
+        [],
+    ):
 
         result = match_condition(
             facts=facts,
@@ -1394,7 +1402,10 @@ def evaluate_rule(
     # EXCLUSION
     # --------------------------------------------------------
 
-    for condition in EXCLUSION_CONDITIONS:
+    for condition in rule.get(
+        "exclusion_conditions",
+        [],
+    ):
 
         result = match_condition(
             facts=facts,
@@ -1410,7 +1421,10 @@ def evaluate_rule(
     # EXCEPTION
     # --------------------------------------------------------
 
-    for condition in EXCEPTION_CONDITIONS:
+    for condition in rule.get(
+        "exceptions",
+        [],
+    ):
 
         result = match_condition(
             facts=facts,
@@ -1595,20 +1609,15 @@ def select_core_rule(
                 break
 
     # --------------------------------------------------------
-    # 强制固定条件
+    # Canonical Rule 条件
     # --------------------------------------------------------
-
-    rule["conditions"] = list(
-        REQUIRED_CONDITIONS
-    )
-
-    rule["exclusion_conditions"] = list(
-        EXCLUSION_CONDITIONS
-    )
-
-    rule["exceptions"] = list(
-        EXCEPTION_CONDITIONS
-    )
+    #
+    # build_core_rule() 已经通过 Rule Registry
+    # 获取 Canonical Rule。
+    #
+    # 此处不再重复使用独立常量覆盖条件，
+    # 避免形成第二个 Rule Definition 来源。
+    # --------------------------------------------------------
 
     return rule
 
