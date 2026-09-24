@@ -176,11 +176,8 @@ import re
 from copy import deepcopy
 from typing import Any, Dict, List, Optional
 
-from src.legal_rule_definition import (
-    EXCEPTION_CONDITIONS,
-    EXCLUSION_CONDITIONS,
-    REQUIRED_CONDITIONS,
-)
+from src.legal_rule_definition import RULE_ID
+from src.legal_rule_registry import get_rule
 
 
 
@@ -808,19 +805,27 @@ def build_article_14_rule(
     # Retriever 只负责构造知识层 Rule，不负责事实判断。
     # ========================================================
 
-    result["conditions"] = list(REQUIRED_CONDITIONS)
+    canonical_rule = get_rule(RULE_ID)
 
-    result["exclusion_conditions"] = list(EXCLUSION_CONDITIONS)
+    result["conditions"] = list(
+        canonical_rule["conditions"]
+    )
 
-    result["exceptions"] = list(EXCEPTION_CONDITIONS)
+    result["exclusion_conditions"] = list(
+        canonical_rule["exclusion_conditions"]
+    )
 
-    result["legal_obligations"] = [
-        "用人单位应当订立无固定期限劳动合同",
-    ]
+    result["exceptions"] = list(
+        canonical_rule["exceptions"]
+    )
 
-    result["legal_consequences"] = [
-        "符合第十四条规定条件时，用人单位应当订立无固定期限劳动合同",
-    ]
+    result["legal_obligations"] = list(
+        canonical_rule["legal_obligations"]
+    )
+
+    result["legal_consequences"] = list(
+        canonical_rule["legal_consequences"]
+    )
 
     result["references"] = [
         "第十四条",
@@ -2745,6 +2750,8 @@ def test_article_14_structured_rule():
         article
     )
 
+    canonical_rule = get_rule(RULE_ID)
+
     assert (
         result["article_number"]
         == "第十四条"
@@ -2752,7 +2759,9 @@ def test_article_14_structured_rule():
 
     assert len(
         result["conditions"]
-    ) == 3
+    ) == len(
+        canonical_rule["conditions"]
+    )
 
     assert len(
         result[
@@ -2896,6 +2905,8 @@ def test_prepare_articles():
 
     article = result[0]
 
+    canonical_rule = get_rule(RULE_ID)
+
     assert (
         article[
             "article_number"
@@ -2905,7 +2916,9 @@ def test_prepare_articles():
 
     assert len(
         article["conditions"]
-    ) == 3
+    ) == len(
+        canonical_rule["conditions"]
+    )
 
     assert len(
         article[
@@ -2971,21 +2984,19 @@ def test_three_contract_rule_structure():
         article
     )
 
-    expected_conditions = [
-        "连续订立二次固定期限劳动合同",
-        "续订劳动合同",
-        "劳动者提出或者同意续订、订立劳动合同",
-    ]
+    canonical_rule = get_rule(RULE_ID)
 
-    expected_exclusions = [
-        "劳动者存在《劳动合同法》第三十九条规定的情形",
-        "劳动者存在《劳动合同法》第四十条第一项规定的情形",
-        "劳动者存在《劳动合同法》第四十条第二项规定的情形",
-    ]
+    expected_conditions = list(
+        canonical_rule["conditions"]
+    )
 
-    expected_exceptions = [
-        "劳动者提出订立固定期限劳动合同",
-    ]
+    expected_exclusions = list(
+        canonical_rule["exclusion_conditions"]
+    )
+
+    expected_exceptions = list(
+        canonical_rule["exceptions"]
+    )
 
     assert (
         result["conditions"]

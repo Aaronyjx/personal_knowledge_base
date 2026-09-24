@@ -127,6 +127,9 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
 
+from src.legal_rule_definition import RULE_ID
+from src.legal_rule_registry import get_rule
+
 
 # ============================================================
 # Version
@@ -156,22 +159,42 @@ NOT_ESTABLISHED = "NOT_ESTABLISHED"
 # Expected Condition Structure
 # ============================================================
 
-EXPECTED_REQUIRED_CONDITIONS = [
-    "连续订立二次固定期限劳动合同",
-    "存在后续订立的劳动合同",
-    "续订劳动合同",
-    "劳动者提出或者同意续订、订立劳动合同",
-]
+# ============================================================
+# Canonical Rule Compatibility Structure
+# ============================================================
+#
+# EXPECTED_* 保留为 Builder 的兼容接口。
+#
+# 它们不再自行定义 Article 14 条件，
+# 而是统一从 Canonical Rule Registry 获取。
+#
+# 因此：
+#
+#     Rule Definition
+#           ↓
+#     Rule Registry
+#           ↓
+#     EXPECTED_*
+#           ↓
+#     Builder Validation
+#
+# Builder 仍然可以使用原有 EXPECTED_* 名称，
+# 但不再形成第二套法律规则定义。
+# ============================================================
 
-EXPECTED_EXCLUSION_CONDITIONS = [
-    "劳动者存在《劳动合同法》第三十九条规定的情形",
-    "劳动者存在《劳动合同法》第四十条第一项规定的情形",
-    "劳动者存在《劳动合同法》第四十条第二项规定的情形",
-]
+_CANONICAL_RULE = get_rule(RULE_ID)
 
-EXPECTED_EXCEPTION_CONDITIONS = [
-    "劳动者提出订立固定期限劳动合同",
-]
+EXPECTED_REQUIRED_CONDITIONS = list(
+    _CANONICAL_RULE["conditions"]
+)
+
+EXPECTED_EXCLUSION_CONDITIONS = list(
+    _CANONICAL_RULE["exclusion_conditions"]
+)
+
+EXPECTED_EXCEPTION_CONDITIONS = list(
+    _CANONICAL_RULE["exceptions"]
+)
 
 EXPECTED_TOTAL_CONDITIONS = (
     len(EXPECTED_REQUIRED_CONDITIONS)
@@ -1205,7 +1228,7 @@ def validate_condition_structure(
     ):
         errors.append(
             "REQUIRED 数量错误："
-            f"{result['required']} != 4"
+            f"{result['required']} != {len(EXPECTED_REQUIRED_CONDITIONS)}"
         )
 
     if (
@@ -1216,7 +1239,7 @@ def validate_condition_structure(
     ):
         errors.append(
             "EXCLUSION 数量错误："
-            f"{result['exclusion']} != 3"
+            f"{result['exclusion']} != {len(EXPECTED_EXCLUSION_CONDITIONS)}"
         )
 
     if (
@@ -1227,7 +1250,7 @@ def validate_condition_structure(
     ):
         errors.append(
             "EXCEPTION 数量错误："
-            f"{result['exception']} != 1"
+            f"{result['exception']} != {len(EXPECTED_EXCEPTION_CONDITIONS)}"
         )
 
     if result["unknown_types"]:
