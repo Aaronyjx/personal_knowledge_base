@@ -176,6 +176,14 @@ import re
 from copy import deepcopy
 from typing import Any, Dict, List, Optional
 
+from src.legal_rule_definition import (
+    EXCEPTION_CONDITIONS,
+    EXCLUSION_CONDITIONS,
+    REQUIRED_CONDITIONS,
+)
+
+
+
 
 # ============================================================
 # Version
@@ -792,21 +800,19 @@ def build_article_14_rule(
         "应当订立无固定期限劳动合同"
     )
 
-    result["conditions"] = [
-        "连续订立二次固定期限劳动合同",
-        "续订劳动合同",
-        "劳动者提出或者同意续订、订立劳动合同",
-    ]
+    # ========================================================
+    # Canonical Rule Definition
+    # ========================================================
+    # Article 14 的 REQUIRED / EXCLUSION / EXCEPTION
+    # 统一来自 legal_rule_definition.py。
+    # Retriever 只负责构造知识层 Rule，不负责事实判断。
+    # ========================================================
 
-    result["exclusion_conditions"] = [
-        "劳动者存在《劳动合同法》第三十九条规定的情形",
-        "劳动者存在《劳动合同法》第四十条第一项规定的情形",
-        "劳动者存在《劳动合同法》第四十条第二项规定的情形",
-    ]
+    result["conditions"] = list(REQUIRED_CONDITIONS)
 
-    result["exceptions"] = [
-        "劳动者提出订立固定期限劳动合同",
-    ]
+    result["exclusion_conditions"] = list(EXCLUSION_CONDITIONS)
+
+    result["exceptions"] = list(EXCEPTION_CONDITIONS)
 
     result["legal_obligations"] = [
         "用人单位应当订立无固定期限劳动合同",

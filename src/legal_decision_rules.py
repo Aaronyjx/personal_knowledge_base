@@ -43,41 +43,30 @@ from __future__ import annotations
 from typing import Any, Dict
 
 
-LABOR_CONTRACT_LAW = "中华人民共和国劳动合同法"
+# ============================================================
+# Canonical Rule Definition
+# ============================================================
+#
+# Article 14 的核心条件统一由 legal_rule_definition.py 提供。
+# 本模块继续负责 Decision Rules 层的 Rule 构建。
+#
+# 保持原有公开常量名称不变，避免影响 Decision Engine。
+# ============================================================
 
-LABOR_CONTRACT_LAW_ARTICLE_14 = "第十四条"
-
-
-IMPLEMENTING_REGULATIONS = (
-    "中华人民共和国劳动合同法实施条例"
+from src.legal_rule_definition import (
+    ALL_CONDITIONS,
+    EXCEPTION_CONDITIONS,
+    EXCLUSION_CONDITIONS,
+    IMPLEMENTING_REGULATIONS,
+    LABOR_CONTRACT_LAW,
+    LABOR_CONTRACT_LAW_ARTICLE_14,
+    REQUIRED_CONDITIONS,
 )
 
 
-REQUIRED_CONDITIONS = [
-    "连续订立二次固定期限劳动合同",
-    "存在后续订立的劳动合同",
-    "续订劳动合同",
-    "劳动者提出或者同意续订、订立劳动合同",
-]
-
-
-EXCLUSION_CONDITIONS = [
-    "劳动者存在《劳动合同法》第三十九条规定的情形",
-    "劳动者存在《劳动合同法》第四十条第一项规定的情形",
-    "劳动者存在《劳动合同法》第四十条第二项规定的情形",
-]
-
-
-EXCEPTION_CONDITIONS = [
-    "劳动者提出订立固定期限劳动合同",
-]
-
-
-ALL_CONDITIONS = (
-    REQUIRED_CONDITIONS
-    + EXCLUSION_CONDITIONS
-    + EXCEPTION_CONDITIONS
-)
+# ============================================================
+# Article 14 / Labor Contract Law Identity
+# ============================================================
 
 
 COMBINED_ARTICLE_39_40_NEGATIVE_PATTERNS = [
