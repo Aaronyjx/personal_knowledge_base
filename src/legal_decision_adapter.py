@@ -69,6 +69,10 @@ from src.legal_rule_builder import (
     prioritize_legal_rules,
 )
 
+from src.legal_rule_definition import (
+    REQUIRED_CONDITIONS,
+)
+
 from src.legal_answer_builder import (
     safe_text,
 )
@@ -388,9 +392,7 @@ def build_fact_condition_mappings(
         rules
     )
 
-    target_condition = (
-        "连续订立二次固定期限劳动合同"
-    )
+    target_condition = REQUIRED_CONDITIONS[0]
 
     for rule in normalized_rules:
 
