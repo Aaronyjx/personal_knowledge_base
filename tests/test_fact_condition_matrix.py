@@ -85,25 +85,25 @@ from src.legal_decision_engine import make_decision
 
 
 # ============================================================
-# 固定 8 个法律条件
+# Canonical Rule Registry
 # ============================================================
 
-REQUIRED_CONDITIONS = [
-    "连续订立二次固定期限劳动合同",
-    "存在后续订立的劳动合同",
-    "续订劳动合同",
-    "劳动者提出或者同意续订、订立劳动合同",
-]
+from src.legal_rule_definition import RULE_ID
+from src.legal_rule_registry import get_rule
 
-EXCLUSION_CONDITIONS = [
-    "劳动者存在《劳动合同法》第三十九条规定的情形",
-    "劳动者存在《劳动合同法》第四十条第一项规定的情形",
-    "劳动者存在《劳动合同法》第四十条第二项规定的情形",
-]
+_CANONICAL_RULE = get_rule(RULE_ID)
 
-EXCEPTION_CONDITIONS = [
-    "劳动者提出订立固定期限劳动合同",
-]
+REQUIRED_CONDITIONS = list(
+    _CANONICAL_RULE["conditions"]
+)
+
+EXCLUSION_CONDITIONS = list(
+    _CANONICAL_RULE["exclusion_conditions"]
+)
+
+EXCEPTION_CONDITIONS = list(
+    _CANONICAL_RULE["exceptions"]
+)
 
 ALL_CONDITIONS = (
     REQUIRED_CONDITIONS

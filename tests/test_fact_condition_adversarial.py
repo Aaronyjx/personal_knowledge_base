@@ -87,28 +87,39 @@ from src.legal_decision_engine import make_decision
 # 固定条件名称
 # ============================================================
 
-REQUIRED_1 = "连续订立二次固定期限劳动合同"
-REQUIRED_2 = "存在后续订立的劳动合同"
-REQUIRED_3 = "续订劳动合同"
-REQUIRED_4 = "劳动者提出或者同意续订、订立劳动合同"
+from src.legal_rule_definition import RULE_ID
+from src.legal_rule_registry import get_rule
 
-EXCLUSION_39 = "劳动者存在《劳动合同法》第三十九条规定的情形"
-EXCLUSION_40_1 = "劳动者存在《劳动合同法》第四十条第一项规定的情形"
-EXCLUSION_40_2 = "劳动者存在《劳动合同法》第四十条第二项规定的情形"
+_CANONICAL_RULE = get_rule(RULE_ID)
 
-EXCEPTION_FIXED = "劳动者提出订立固定期限劳动合同"
+REQUIRED_CONDITIONS = list(
+    _CANONICAL_RULE["conditions"]
+)
 
+EXCLUSION_CONDITIONS = list(
+    _CANONICAL_RULE["exclusion_conditions"]
+)
 
-ALL_CONDITIONS = [
-    REQUIRED_1,
-    REQUIRED_2,
-    REQUIRED_3,
-    REQUIRED_4,
-    EXCLUSION_39,
-    EXCLUSION_40_1,
-    EXCLUSION_40_2,
-    EXCEPTION_FIXED,
-]
+EXCEPTION_CONDITIONS = list(
+    _CANONICAL_RULE["exceptions"]
+)
+
+REQUIRED_1 = REQUIRED_CONDITIONS[0]
+REQUIRED_2 = REQUIRED_CONDITIONS[1]
+REQUIRED_3 = REQUIRED_CONDITIONS[2]
+REQUIRED_4 = REQUIRED_CONDITIONS[3]
+
+EXCLUSION_39 = EXCLUSION_CONDITIONS[0]
+EXCLUSION_40_1 = EXCLUSION_CONDITIONS[1]
+EXCLUSION_40_2 = EXCLUSION_CONDITIONS[2]
+
+EXCEPTION_FIXED = EXCEPTION_CONDITIONS[0]
+
+ALL_CONDITIONS = (
+    REQUIRED_CONDITIONS
+    + EXCLUSION_CONDITIONS
+    + EXCEPTION_CONDITIONS
+)
 
 
 # ============================================================
