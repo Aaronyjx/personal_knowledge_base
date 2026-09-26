@@ -224,8 +224,8 @@ def component_test():
     )
 
     forbidden_proofs = {
-        "续订劳动合同",
-        "劳动者提出或者同意续订、订立劳动合同",
+        REQUIRED_CONDITIONS[2],
+        REQUIRED_CONDITIONS[3],
         "不存在第三十九条规定情形",
         "不存在第四十条第一项规定情形",
         "不存在第四十条第二项规定情形",
