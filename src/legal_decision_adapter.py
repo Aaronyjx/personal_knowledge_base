@@ -424,7 +424,7 @@ def build_fact_condition_mappings(
                         "连续订立二次固定期限劳动合同的最低数量门槛。"
                     ),
                     "does_not_prove": [
-                        "续订劳动合同",
+                        REQUIRED_CONDITIONS[2],
                         "劳动者提出或者同意续订、订立劳动合同",
                         "不存在第三十九条规定情形",
                         "不存在第四十条第一项规定情形",
