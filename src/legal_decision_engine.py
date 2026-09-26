@@ -188,7 +188,10 @@ from src.legal_common import (
 
 from src.legal_decision_rules import (
     ALL_CONDITIONS,
+    EXCEPTION_CONDITIONS,
+    EXCLUSION_CONDITIONS,
     LABOR_CONTRACT_LAW,
+    REQUIRED_CONDITIONS,
     build_core_rule,
 )
 
@@ -765,7 +768,7 @@ def match_condition(
     # REQUIRED 1
     # ========================================================
 
-    if condition == "连续订立二次固定期限劳动合同":
+    if condition == REQUIRED_CONDITIONS[0]:
 
         contract_sequence = (
             facts.contract_sequence
