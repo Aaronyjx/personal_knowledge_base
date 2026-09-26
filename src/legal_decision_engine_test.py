@@ -508,7 +508,7 @@ def run_additional_tests() -> None:
     assert_condition_status(
         result_2,
         EXCEPTION_CONDITIONS[0],
-        SATISFIED,
+        NOT_SATISFIED,
     )
 
     # ========================================================
@@ -528,8 +528,8 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_3,
-        "劳动者存在《劳动合同法》第三十九条规定的情形",
-        NOT_SATISFIED,
+        EXCLUSION_CONDITIONS[0],
+        SATISFIED,
     )
 
     assert (
@@ -558,8 +558,8 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_4,
-        "劳动者存在《劳动合同法》第三十九条规定的情形",
-        SATISFIED,
+        EXCLUSION_CONDITIONS[0],
+        NOT_SATISFIED,
     )
 
     # ========================================================
@@ -578,8 +578,8 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_5,
-        "劳动者存在《劳动合同法》第四十条第一项规定的情形",
-        SATISFIED,
+        EXCLUSION_CONDITIONS[1],
+        NOT_SATISFIED,
     )
 
     # ========================================================
@@ -598,8 +598,8 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_6,
-        "劳动者存在《劳动合同法》第四十条第二项规定的情形",
-        SATISFIED,
+        EXCLUSION_CONDITIONS[2],
+        NOT_SATISFIED,
     )
 
     # ========================================================
@@ -618,8 +618,8 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_7,
-        "劳动者提出订立固定期限劳动合同",
-        SATISFIED,
+        EXCEPTION_CONDITIONS[0],
+        NOT_SATISFIED,
     )
 
     # ========================================================
@@ -716,8 +716,8 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_10,
-        "劳动者提出订立固定期限劳动合同",
-        SATISFIED,
+        EXCEPTION_CONDITIONS[0],
+        NOT_SATISFIED,
     )
 
     # ========================================================
@@ -822,8 +822,8 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_11,
-        "劳动者存在《劳动合同法》第三十九条规定的情形",
-        SATISFIED,
+        EXCLUSION_CONDITIONS[0],
+        NOT_SATISFIED,
     )
 
     # --------------------------------------------------------
@@ -832,8 +832,8 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_11,
-        "劳动者存在《劳动合同法》第四十条第一项规定的情形",
-        SATISFIED,
+        EXCLUSION_CONDITIONS[1],
+        NOT_SATISFIED,
     )
 
     # --------------------------------------------------------
@@ -842,8 +842,8 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_11,
-        "劳动者存在《劳动合同法》第四十条第二项规定的情形",
-        SATISFIED,
+        EXCLUSION_CONDITIONS[2],
+        NOT_SATISFIED,
     )
 
     # --------------------------------------------------------
@@ -853,7 +853,7 @@ def run_additional_tests() -> None:
     assert_condition_status(
         result_11,
         EXCEPTION_CONDITIONS[0],
-        SATISFIED,
+        NOT_SATISFIED,
     )
 
     # --------------------------------------------------------
@@ -864,7 +864,7 @@ def run_additional_tests() -> None:
         len(
             result_11.satisfied_conditions
         )
-        == 8
+        == 4
     )
 
     # --------------------------------------------------------
@@ -886,7 +886,7 @@ def run_additional_tests() -> None:
         len(
             result_11.not_satisfied_conditions
         )
-        == 0
+        == 4
     )
 
     # --------------------------------------------------------
