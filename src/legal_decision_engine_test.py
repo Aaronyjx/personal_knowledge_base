@@ -318,7 +318,7 @@ def run_component_test() -> None:
 
     assert_condition_status(
         decision,
-        "劳动者存在《劳动合同法》第四十条第二项规定的情形",
+        EXCLUSION_CONDITIONS[2],
         UNKNOWN,
     )
 
