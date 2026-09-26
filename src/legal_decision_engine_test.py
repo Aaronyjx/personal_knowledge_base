@@ -507,7 +507,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_2,
-        "劳动者提出订立固定期限劳动合同",
+        EXCEPTION_CONDITIONS[0],
         SATISFIED,
     )
 
@@ -852,7 +852,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_11,
-        "劳动者提出订立固定期限劳动合同",
+        EXCEPTION_CONDITIONS[0],
         SATISFIED,
     )
 
