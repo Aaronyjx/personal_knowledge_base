@@ -85,6 +85,11 @@ from src.legal_decision_engine import (
 )
 
 
+from src.legal_decision_rules import (
+    REQUIRED_CONDITIONS,
+)
+
+
 ENGINE_VERSION = "V6.0-14"
 
 
