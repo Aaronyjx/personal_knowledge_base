@@ -638,13 +638,13 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_8,
-        "续订劳动合同",
+        REQUIRED_CONDITIONS[2],
         UNKNOWN,
     )
 
     assert_condition_status(
         result_8,
-        "存在后续订立的劳动合同",
+        REQUIRED_CONDITIONS[1],
         UNKNOWN,
     )
 
@@ -664,19 +664,19 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_9,
-        "劳动者提出或者同意续订、订立劳动合同",
+        REQUIRED_CONDITIONS[3],
         SATISFIED,
     )
 
     assert_condition_status(
         result_9,
-        "续订劳动合同",
+        REQUIRED_CONDITIONS[2],
         UNKNOWN,
     )
 
     assert_condition_status(
         result_9,
-        "存在后续订立的劳动合同",
+        REQUIRED_CONDITIONS[1],
         UNKNOWN,
     )
 
@@ -698,19 +698,19 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_10,
-        "存在后续订立的劳动合同",
+        REQUIRED_CONDITIONS[1],
         SATISFIED,
     )
 
     assert_condition_status(
         result_10,
-        "续订劳动合同",
+        REQUIRED_CONDITIONS[2],
         SATISFIED,
     )
 
     assert_condition_status(
         result_10,
-        "劳动者提出或者同意续订、订立劳动合同",
+        REQUIRED_CONDITIONS[3],
         SATISFIED,
     )
 
