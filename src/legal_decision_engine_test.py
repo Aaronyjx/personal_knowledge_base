@@ -86,6 +86,7 @@ from src.legal_decision_engine import (
 
 
 from src.legal_decision_rules import (
+    EXCLUSION_CONDITIONS,
     REQUIRED_CONDITIONS,
 )
 
@@ -305,7 +306,7 @@ def run_component_test() -> None:
 
     assert_condition_status(
         decision,
-        "劳动者存在《劳动合同法》第三十九条规定的情形",
+        EXCLUSION_CONDITIONS[0],
         UNKNOWN,
     )
 
