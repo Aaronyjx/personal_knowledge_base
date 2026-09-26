@@ -95,7 +95,15 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
-from .legal_rule_definition import EXCEPTION_CONDITIONS, REQUIRED_CONDITIONS
+from .legal_rule_definition import RULE_ID
+from .legal_rule_registry import get_rule
+
+
+# ============================================================
+# Canonical Rule
+# ============================================================
+
+canonical_rule = get_rule(RULE_ID)
 
 
 # ============================================================
@@ -641,7 +649,7 @@ def extract_article_14_rule(
     if "连续订立二次固定期限劳动合同" in text:
 
         result["conditions"].append(
-            REQUIRED_CONDITIONS[0]
+            canonical_rule["conditions"][0]
         )
 
     # --------------------------------------------------------
@@ -651,7 +659,7 @@ def extract_article_14_rule(
     if "续订劳动合同" in text:
 
         result["conditions"].append(
-            REQUIRED_CONDITIONS[2]
+            canonical_rule["conditions"][2]
         )
 
     # --------------------------------------------------------
@@ -664,7 +672,7 @@ def extract_article_14_rule(
     ):
 
         result["conditions"].append(
-            REQUIRED_CONDITIONS[3]
+            canonical_rule["conditions"][3]
         )
 
     # --------------------------------------------------------
@@ -690,7 +698,7 @@ def extract_article_14_rule(
     if "除劳动者提出订立固定期限劳动合同外" in text:
 
         result["exceptions"].append(
-            EXCEPTION_CONDITIONS[0]
+            canonical_rule["exceptions"][0]
         )
 
     # --------------------------------------------------------
