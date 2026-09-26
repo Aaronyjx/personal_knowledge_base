@@ -340,8 +340,8 @@ def run_component_test() -> None:
     assert set(
         decision.satisfied_conditions
     ) == {
-        "连续订立二次固定期限劳动合同",
-        "存在后续订立的劳动合同",
+        REQUIRED_CONDITIONS[0],
+        REQUIRED_CONDITIONS[1],
     }
 
     # --------------------------------------------------------
@@ -351,11 +351,11 @@ def run_component_test() -> None:
     assert set(
         decision.unknown_conditions
     ) == {
-        "续订劳动合同",
-        "劳动者提出或者同意续订、订立劳动合同",
-        "劳动者存在《劳动合同法》第三十九条规定的情形",
-        "劳动者存在《劳动合同法》第四十条第一项规定的情形",
-        "劳动者存在《劳动合同法》第四十条第二项规定的情形",
+        REQUIRED_CONDITIONS[2],
+        REQUIRED_CONDITIONS[3],
+        EXCLUSION_CONDITIONS[0],
+        EXCLUSION_CONDITIONS[1],
+        EXCLUSION_CONDITIONS[2],
         EXCEPTION_CONDITIONS[0],
     }
 
