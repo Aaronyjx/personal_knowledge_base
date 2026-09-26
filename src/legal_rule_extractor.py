@@ -95,7 +95,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
-from .legal_rule_definition import REQUIRED_CONDITIONS
+from .legal_rule_definition import EXCEPTION_CONDITIONS, REQUIRED_CONDITIONS
 
 
 # ============================================================
@@ -690,7 +690,7 @@ def extract_article_14_rule(
     if "除劳动者提出订立固定期限劳动合同外" in text:
 
         result["exceptions"].append(
-            "劳动者提出订立固定期限劳动合同"
+            EXCEPTION_CONDITIONS[0]
         )
 
     # --------------------------------------------------------
