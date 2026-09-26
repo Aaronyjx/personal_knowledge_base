@@ -70,7 +70,11 @@ from src.legal_rule_builder import (
 )
 
 from src.legal_rule_definition import (
-    REQUIRED_CONDITIONS,
+    RULE_ID,
+)
+
+from src.legal_rule_registry import (
+    get_rule,
 )
 
 from src.legal_answer_builder import (
@@ -392,7 +396,10 @@ def build_fact_condition_mappings(
         rules
     )
 
-    target_condition = REQUIRED_CONDITIONS[0]
+    canonical_rule = get_rule(RULE_ID)
+    canonical_conditions = canonical_rule["conditions"]
+
+    target_condition = canonical_conditions[0]
 
     for rule in normalized_rules:
 
@@ -424,8 +431,8 @@ def build_fact_condition_mappings(
                         "连续订立二次固定期限劳动合同的最低数量门槛。"
                     ),
                     "does_not_prove": [
-                        REQUIRED_CONDITIONS[2],
-                        REQUIRED_CONDITIONS[3],
+                        canonical_conditions[2],
+                        canonical_conditions[3],
                         "不存在第三十九条规定情形",
                         "不存在第四十条第一项规定情形",
                         "不存在第四十条第二项规定情形",
