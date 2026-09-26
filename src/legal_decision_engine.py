@@ -187,12 +187,16 @@ from src.legal_common import (
 )
 
 from src.legal_decision_rules import (
-    ALL_CONDITIONS,
-    EXCEPTION_CONDITIONS,
-    EXCLUSION_CONDITIONS,
     LABOR_CONTRACT_LAW,
-    REQUIRED_CONDITIONS,
     build_core_rule,
+)
+
+from src.legal_rule_definition import (
+    RULE_ID,
+)
+
+from src.legal_rule_registry import (
+    get_rule,
 )
 
 
@@ -271,6 +275,37 @@ IMPLEMENTING_REGULATIONS = (
 # ============================================================
 # Article 14 Conditions
 # ============================================================
+
+# ============================================================
+# Canonical Conditions
+# ============================================================
+#
+# Article 14 的 Canonical Condition Identity 统一由
+# legal_rule_registry.py 提供。
+#
+# 保留本模块原有的条件常量名称，避免修改后续 Decision
+# Engine 判定逻辑；但条件的唯一来源改为 Rule Registry。
+# ============================================================
+
+_CANONICAL_RULE = get_rule(RULE_ID)
+
+REQUIRED_CONDITIONS = list(
+    _CANONICAL_RULE["conditions"]
+)
+
+EXCLUSION_CONDITIONS = list(
+    _CANONICAL_RULE["exclusion_conditions"]
+)
+
+EXCEPTION_CONDITIONS = list(
+    _CANONICAL_RULE["exceptions"]
+)
+
+ALL_CONDITIONS = (
+    REQUIRED_CONDITIONS
+    + EXCLUSION_CONDITIONS
+    + EXCEPTION_CONDITIONS
+)
 
 
 
