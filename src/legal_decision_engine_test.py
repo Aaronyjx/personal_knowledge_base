@@ -275,7 +275,7 @@ def run_component_test() -> None:
 
     assert_condition_status(
         decision,
-        "存在后续订立的劳动合同",
+        REQUIRED_CONDITIONS[1],
         SATISFIED,
     )
 
