@@ -479,25 +479,25 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_2,
-        "连续订立二次固定期限劳动合同",
+        REQUIRED_CONDITIONS[0],
         SATISFIED,
     )
 
     assert_condition_status(
         result_2,
-        "存在后续订立的劳动合同",
+        REQUIRED_CONDITIONS[1],
         SATISFIED,
     )
 
     assert_condition_status(
         result_2,
-        "续订劳动合同",
+        REQUIRED_CONDITIONS[2],
         SATISFIED,
     )
 
     assert_condition_status(
         result_2,
-        "劳动者提出或者同意续订、订立劳动合同",
+        REQUIRED_CONDITIONS[3],
         SATISFIED,
     )
 
@@ -538,7 +538,7 @@ def run_additional_tests() -> None:
     )
 
     assert (
-        "劳动者存在《劳动合同法》第三十九条规定的情形"
+        EXCLUSION_CONDITIONS[0]
         in result_3.triggered_exclusion_conditions
     )
 
@@ -782,7 +782,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_11,
-        "连续订立二次固定期限劳动合同",
+        REQUIRED_CONDITIONS[0],
         SATISFIED,
     )
 
@@ -792,7 +792,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_11,
-        "存在后续订立的劳动合同",
+        REQUIRED_CONDITIONS[1],
         SATISFIED,
     )
 
@@ -802,7 +802,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_11,
-        "续订劳动合同",
+        REQUIRED_CONDITIONS[2],
         SATISFIED,
     )
 
@@ -812,7 +812,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_11,
-        "劳动者提出或者同意续订、订立劳动合同",
+        REQUIRED_CONDITIONS[3],
         SATISFIED,
     )
 
