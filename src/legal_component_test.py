@@ -36,6 +36,10 @@ from src.legal_decision_adapter import (
     build_structured_context,
 )
 
+from src.legal_decision_rules import (
+    REQUIRED_CONDITIONS,
+)
+
 from src.legal_pipeline import (
     run_decision_engine,
     run_answer_builder,
@@ -186,7 +190,7 @@ def component_test():
             item for item in mappings
             if isinstance(item, dict)
             and normalize_text(item.get("condition", ""))
-            == "连续订立二次固定期限劳动合同"
+            == REQUIRED_CONDITIONS[0]
         ),
         None,
     )
