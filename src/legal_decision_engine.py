@@ -651,8 +651,8 @@ def build_rule_dependency(
 
         not_proven_by_fact.extend(
             [
-                "续订劳动合同",
-                "劳动者提出或者同意续订、订立劳动合同",
+                REQUIRED_CONDITIONS[2],
+                REQUIRED_CONDITIONS[3],
                 "劳动者不存在《劳动合同法》第三十九条规定的情形",
                 "劳动者不存在《劳动合同法》第四十条第一项规定的情形",
                 "劳动者不存在《劳动合同法》第四十条第二项规定的情形",
