@@ -651,7 +651,7 @@ def extract_article_14_rule(
     if "续订劳动合同" in text:
 
         result["conditions"].append(
-            "属于续订劳动合同"
+            REQUIRED_CONDITIONS[2]
         )
 
     # --------------------------------------------------------
