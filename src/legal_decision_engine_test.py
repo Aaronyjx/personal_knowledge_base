@@ -86,6 +86,7 @@ from src.legal_decision_engine import (
 
 
 from src.legal_decision_rules import (
+    EXCEPTION_CONDITIONS,
     EXCLUSION_CONDITIONS,
     REQUIRED_CONDITIONS,
 )
@@ -328,7 +329,7 @@ def run_component_test() -> None:
 
     assert_condition_status(
         decision,
-        "劳动者提出订立固定期限劳动合同",
+        EXCEPTION_CONDITIONS[0],
         UNKNOWN,
     )
 
