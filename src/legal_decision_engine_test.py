@@ -85,10 +85,26 @@ from src.legal_decision_engine import (
 )
 
 
-from src.legal_decision_rules import (
-    EXCEPTION_CONDITIONS,
-    EXCLUSION_CONDITIONS,
-    REQUIRED_CONDITIONS,
+from src.legal_rule_definition import (
+    RULE_ID,
+)
+
+from src.legal_rule_registry import (
+    get_rule,
+)
+
+_CANONICAL_RULE = get_rule(RULE_ID)
+
+REQUIRED_CONDITIONS = list(
+    _CANONICAL_RULE["conditions"]
+)
+
+EXCLUSION_CONDITIONS = list(
+    _CANONICAL_RULE["exclusion_conditions"]
+)
+
+EXCEPTION_CONDITIONS = list(
+    _CANONICAL_RULE["exceptions"]
 )
 
 
