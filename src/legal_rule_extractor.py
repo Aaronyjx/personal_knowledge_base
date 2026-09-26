@@ -95,6 +95,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+from .legal_rule_definition import REQUIRED_CONDITIONS
 
 
 # ============================================================
@@ -640,7 +641,7 @@ def extract_article_14_rule(
     if "连续订立二次固定期限劳动合同" in text:
 
         result["conditions"].append(
-            "连续订立二次固定期限劳动合同"
+            REQUIRED_CONDITIONS[0]
         )
 
     # --------------------------------------------------------
