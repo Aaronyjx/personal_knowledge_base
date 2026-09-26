@@ -304,8 +304,8 @@ def component_test():
     )
 
     assert satisfied == {
-        "连续订立二次固定期限劳动合同",
-        "存在后续订立的劳动合同",
+        REQUIRED_CONDITIONS[0],
+        REQUIRED_CONDITIONS[1],
     }, (
         "V6.1 Component Test：当前事实下应满足数量门槛和后续合同存在条件"
     )
@@ -327,8 +327,8 @@ def component_test():
     }
 
     assert unknown_names == {
-        "续订劳动合同",
-        "劳动者提出或者同意续订、订立劳动合同",
+        REQUIRED_CONDITIONS[2],
+        REQUIRED_CONDITIONS[3],
     }, (
         "V6.1 Component Test：Required UNKNOWN 条件集合错误"
     )
