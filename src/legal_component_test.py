@@ -36,8 +36,18 @@ from src.legal_decision_adapter import (
     build_structured_context,
 )
 
-from src.legal_decision_rules import (
-    REQUIRED_CONDITIONS,
+from src.legal_rule_definition import (
+    RULE_ID,
+)
+
+from src.legal_rule_registry import (
+    get_rule,
+)
+
+_CANONICAL_RULE = get_rule(RULE_ID)
+
+REQUIRED_CONDITIONS = list(
+    _CANONICAL_RULE["conditions"]
 )
 
 from src.legal_pipeline import (
