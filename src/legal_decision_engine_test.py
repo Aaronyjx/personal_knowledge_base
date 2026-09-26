@@ -295,7 +295,7 @@ def run_component_test() -> None:
 
     assert_condition_status(
         decision,
-        "劳动者提出或者同意续订、订立劳动合同",
+        REQUIRED_CONDITIONS[3],
         UNKNOWN,
     )
 
