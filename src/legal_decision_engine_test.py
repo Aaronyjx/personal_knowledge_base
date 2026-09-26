@@ -1264,25 +1264,25 @@ def run_regression_tests() -> None:
             ),
             "decision": CONDITIONAL,
             "statuses": {
-                "连续订立二次固定期限劳动合同":
+                REQUIRED_CONDITIONS[0]:
                     SATISFIED,
 
-                "存在后续订立的劳动合同":
+                REQUIRED_CONDITIONS[1]:
                     SATISFIED,
 
-                "续订劳动合同":
+                REQUIRED_CONDITIONS[2]:
                     UNKNOWN,
 
-                "劳动者提出或者同意续订、订立劳动合同":
+                REQUIRED_CONDITIONS[3]:
                     UNKNOWN,
 
-                "劳动者存在《劳动合同法》第三十九条规定的情形":
+                EXCLUSION_CONDITIONS[0]:
                     UNKNOWN,
 
-                "劳动者存在《劳动合同法》第四十条第一项规定的情形":
+                EXCLUSION_CONDITIONS[1]:
                     UNKNOWN,
 
-                "劳动者存在《劳动合同法》第四十条第二项规定的情形":
+                EXCLUSION_CONDITIONS[2]:
                     UNKNOWN,
 
                 EXCEPTION_CONDITIONS[0]:
@@ -1300,16 +1300,16 @@ def run_regression_tests() -> None:
             ),
             "decision": CONDITIONAL,
             "statuses": {
-                "连续订立二次固定期限劳动合同":
+                REQUIRED_CONDITIONS[0]:
                     SATISFIED,
 
-                "存在后续订立的劳动合同":
+                REQUIRED_CONDITIONS[1]:
                     SATISFIED,
 
-                "续订劳动合同":
+                REQUIRED_CONDITIONS[2]:
                     SATISFIED,
 
-                "劳动者提出或者同意续订、订立劳动合同":
+                REQUIRED_CONDITIONS[3]:
                     SATISFIED,
 
                 EXCEPTION_CONDITIONS[0]:
@@ -1325,16 +1325,16 @@ def run_regression_tests() -> None:
             ),
             "decision": CONDITIONAL,
             "statuses": {
-                "连续订立二次固定期限劳动合同":
+                REQUIRED_CONDITIONS[0]:
                     SATISFIED,
 
-                "存在后续订立的劳动合同":
+                REQUIRED_CONDITIONS[1]:
                     UNKNOWN,
 
-                "续订劳动合同":
+                REQUIRED_CONDITIONS[2]:
                     UNKNOWN,
 
-                "劳动者提出或者同意续订、订立劳动合同":
+                REQUIRED_CONDITIONS[3]:
                     UNKNOWN,
             },
         },
@@ -1347,13 +1347,13 @@ def run_regression_tests() -> None:
             ),
             "decision": NOT_ESTABLISHED,
             "statuses": {
-                "连续订立二次固定期限劳动合同":
+                REQUIRED_CONDITIONS[0]:
                     SATISFIED,
 
-                "存在后续订立的劳动合同":
+                REQUIRED_CONDITIONS[1]:
                     SATISFIED,
 
-                "劳动者存在《劳动合同法》第三十九条规定的情形":
+                EXCLUSION_CONDITIONS[0]:
                     SATISFIED,
             },
         },
@@ -1366,16 +1366,16 @@ def run_regression_tests() -> None:
             ),
             "decision": CONDITIONAL,
             "statuses": {
-                "连续订立二次固定期限劳动合同":
+                REQUIRED_CONDITIONS[0]:
                     SATISFIED,
 
-                "存在后续订立的劳动合同":
+                REQUIRED_CONDITIONS[1]:
                     SATISFIED,
 
-                "续订劳动合同":
+                REQUIRED_CONDITIONS[2]:
                     SATISFIED,
 
-                "劳动者提出或者同意续订、订立劳动合同":
+                REQUIRED_CONDITIONS[3]:
                     UNKNOWN,
             },
         },
@@ -1388,13 +1388,13 @@ def run_regression_tests() -> None:
             ),
             "decision": CONDITIONAL,
             "statuses": {
-                "连续订立二次固定期限劳动合同":
+                REQUIRED_CONDITIONS[0]:
                     SATISFIED,
 
-                "存在后续订立的劳动合同":
+                REQUIRED_CONDITIONS[1]:
                     UNKNOWN,
 
-                "续订劳动合同":
+                REQUIRED_CONDITIONS[2]:
                     UNKNOWN,
             },
         },
@@ -1407,13 +1407,13 @@ def run_regression_tests() -> None:
             ),
             "decision": CONDITIONAL,
             "statuses": {
-                "连续订立二次固定期限劳动合同":
+                REQUIRED_CONDITIONS[0]:
                     SATISFIED,
 
-                "存在后续订立的劳动合同":
+                REQUIRED_CONDITIONS[1]:
                     UNKNOWN,
 
-                "续订劳动合同":
+                REQUIRED_CONDITIONS[2]:
                     UNKNOWN,
             },
         },
@@ -1426,16 +1426,16 @@ def run_regression_tests() -> None:
             ),
             "decision": CONDITIONAL,
             "statuses": {
-                "连续订立二次固定期限劳动合同":
+                REQUIRED_CONDITIONS[0]:
                     SATISFIED,
 
-                "存在后续订立的劳动合同":
+                REQUIRED_CONDITIONS[1]:
                     UNKNOWN,
 
-                "续订劳动合同":
+                REQUIRED_CONDITIONS[2]:
                     UNKNOWN,
 
-                "劳动者提出或者同意续订、订立劳动合同":
+                REQUIRED_CONDITIONS[3]:
                     SATISFIED,
             },
         },
@@ -1449,16 +1449,16 @@ def run_regression_tests() -> None:
             ),
             "decision": CONDITIONAL,
             "statuses": {
-                "连续订立二次固定期限劳动合同":
+                REQUIRED_CONDITIONS[0]:
                     SATISFIED,
 
-                "存在后续订立的劳动合同":
+                REQUIRED_CONDITIONS[1]:
                     SATISFIED,
 
-                "续订劳动合同":
+                REQUIRED_CONDITIONS[2]:
                     SATISFIED,
 
-                "劳动者提出或者同意续订、订立劳动合同":
+                REQUIRED_CONDITIONS[3]:
                     UNKNOWN,
             },
         },
@@ -1473,16 +1473,16 @@ def run_regression_tests() -> None:
             ),
             "decision": NOT_ESTABLISHED,
             "statuses": {
-                "连续订立二次固定期限劳动合同":
+                REQUIRED_CONDITIONS[0]:
                     SATISFIED,
 
-                "存在后续订立的劳动合同":
+                REQUIRED_CONDITIONS[1]:
                     SATISFIED,
 
-                "续订劳动合同":
+                REQUIRED_CONDITIONS[2]:
                     SATISFIED,
 
-                "劳动者提出或者同意续订、订立劳动合同":
+                REQUIRED_CONDITIONS[3]:
                     SATISFIED,
 
                 EXCEPTION_CONDITIONS[0]:
@@ -1508,25 +1508,25 @@ def run_regression_tests() -> None:
             ),
             "decision": DEFINITE,
             "statuses": {
-                "连续订立二次固定期限劳动合同":
+                REQUIRED_CONDITIONS[0]:
                     SATISFIED,
 
-                "存在后续订立的劳动合同":
+                REQUIRED_CONDITIONS[1]:
                     SATISFIED,
 
-                "续订劳动合同":
+                REQUIRED_CONDITIONS[2]:
                     SATISFIED,
 
-                "劳动者提出或者同意续订、订立劳动合同":
+                REQUIRED_CONDITIONS[3]:
                     SATISFIED,
 
-                "劳动者存在《劳动合同法》第三十九条规定的情形":
+                EXCLUSION_CONDITIONS[0]:
                     NOT_SATISFIED,
 
-                "劳动者存在《劳动合同法》第四十条第一项规定的情形":
+                EXCLUSION_CONDITIONS[1]:
                     NOT_SATISFIED,
 
-                "劳动者存在《劳动合同法》第四十条第二项规定的情形":
+                EXCLUSION_CONDITIONS[2]:
                     NOT_SATISFIED,
 
                 EXCEPTION_CONDITIONS[0]:
