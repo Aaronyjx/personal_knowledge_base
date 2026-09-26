@@ -265,7 +265,7 @@ def run_component_test() -> None:
 
     assert_condition_status(
         decision,
-        "连续订立二次固定期限劳动合同",
+        REQUIRED_CONDITIONS[0],
         SATISFIED,
     )
 
