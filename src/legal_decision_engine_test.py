@@ -1285,7 +1285,7 @@ def run_regression_tests() -> None:
                 "劳动者存在《劳动合同法》第四十条第二项规定的情形":
                     UNKNOWN,
 
-                "劳动者提出订立固定期限劳动合同":
+                EXCEPTION_CONDITIONS[0]:
                     UNKNOWN,
             },
         },
@@ -1312,7 +1312,7 @@ def run_regression_tests() -> None:
                 "劳动者提出或者同意续订、订立劳动合同":
                     SATISFIED,
 
-                "劳动者提出订立固定期限劳动合同":
+                EXCEPTION_CONDITIONS[0]:
                     NOT_SATISFIED,
             },
         },
@@ -1485,7 +1485,7 @@ def run_regression_tests() -> None:
                 "劳动者提出或者同意续订、订立劳动合同":
                     SATISFIED,
 
-                "劳动者提出订立固定期限劳动合同":
+                EXCEPTION_CONDITIONS[0]:
                     SATISFIED,
             },
         },
@@ -1529,7 +1529,7 @@ def run_regression_tests() -> None:
                 "劳动者存在《劳动合同法》第四十条第二项规定的情形":
                     NOT_SATISFIED,
 
-                "劳动者提出订立固定期限劳动合同":
+                EXCEPTION_CONDITIONS[0]:
                     NOT_SATISFIED,
             },
         },
