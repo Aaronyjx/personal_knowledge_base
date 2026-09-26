@@ -805,7 +805,7 @@ def match_condition(
     # REQUIRED 2
     # ========================================================
 
-    if condition == "存在后续订立的劳动合同":
+    if condition == REQUIRED_CONDITIONS[1]:
 
         contract_sequence = (
             facts.contract_sequence
