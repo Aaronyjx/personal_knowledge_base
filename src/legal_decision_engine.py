@@ -903,10 +903,7 @@ def match_condition(
     # REQUIRED 4
     # ========================================================
 
-    if (
-        condition
-        == "劳动者提出或者同意续订、订立劳动合同"
-    ):
+    if condition == REQUIRED_CONDITIONS[3]:
 
         if facts.worker_agreement is True:
 
