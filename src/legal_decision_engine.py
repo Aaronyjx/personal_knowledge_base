@@ -854,7 +854,7 @@ def match_condition(
     # REQUIRED 3
     # ========================================================
 
-    if condition == "续订劳动合同":
+    if condition == REQUIRED_CONDITIONS[2]:
 
         if facts.completed_renewal is True:
 
