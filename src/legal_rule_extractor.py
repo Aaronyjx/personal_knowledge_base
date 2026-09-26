@@ -664,7 +664,7 @@ def extract_article_14_rule(
     ):
 
         result["conditions"].append(
-            "劳动者提出或者同意续订、订立劳动合同"
+            REQUIRED_CONDITIONS[3]
         )
 
     # --------------------------------------------------------
