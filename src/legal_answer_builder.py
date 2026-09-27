@@ -124,6 +124,18 @@ EXCEPTION:
 
 from __future__ import annotations
 
+from src.legal_constants import (
+    SATISFIED,
+    NOT_SATISFIED,
+    UNKNOWN,
+    REQUIRED,
+    EXCLUSION,
+    EXCEPTION,
+    DEFINITE,
+    CONDITIONAL,
+    NOT_ESTABLISHED,
+)
+
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -142,17 +154,8 @@ BUILDER_VERSION = "V6.1"
 # Decision Constants
 # ============================================================
 
-SATISFIED = "SATISFIED"
-NOT_SATISFIED = "NOT_SATISFIED"
-UNKNOWN = "UNKNOWN"
 
-REQUIRED = "REQUIRED"
-EXCLUSION = "EXCLUSION"
-EXCEPTION = "EXCEPTION"
 
-DEFINITE = "DEFINITE"
-CONDITIONAL = "CONDITIONAL"
-NOT_ESTABLISHED = "NOT_ESTABLISHED"
 
 
 # ============================================================

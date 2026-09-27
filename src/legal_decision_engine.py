@@ -177,6 +177,18 @@ V6.1 第一阶段 Fact → Condition 迁移
 
 from __future__ import annotations
 
+from src.legal_constants import (
+    SATISFIED,
+    NOT_SATISFIED,
+    UNKNOWN,
+    REQUIRED,
+    EXCLUSION,
+    EXCEPTION,
+    DEFINITE,
+    CONDITIONAL,
+    NOT_ESTABLISHED,
+)
+
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -228,33 +240,24 @@ ENGINE_VERSION = "V6.1"
 # Condition Status
 # ============================================================
 
-SATISFIED = "SATISFIED"
 
-NOT_SATISFIED = "NOT_SATISFIED"
 
-UNKNOWN = "UNKNOWN"
 
 
 # ============================================================
 # Condition Type
 # ============================================================
 
-REQUIRED = "REQUIRED"
 
-EXCLUSION = "EXCLUSION"
 
-EXCEPTION = "EXCEPTION"
 
 
 # ============================================================
 # Decision Status
 # ============================================================
 
-DEFINITE = "DEFINITE"
 
-CONDITIONAL = "CONDITIONAL"
 
-NOT_ESTABLISHED = "NOT_ESTABLISHED"
 
 
 # ============================================================
