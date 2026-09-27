@@ -1,3 +1,9 @@
+from src.legal_constants import (
+    DEFINITE,
+    CONDITIONAL,
+    NOT_ESTABLISHED,
+)
+
 # -*- coding: utf-8 -*-
 
 """
@@ -77,12 +83,6 @@ from src.legal_condition_validator import (
 # Legal Decision Engine 状态
 # ============================================================
 
-DECISION_DEFINITE = "DEFINITE"
-
-DECISION_CONDITIONAL = "CONDITIONAL"
-
-DECISION_NOT_ESTABLISHED = "NOT_ESTABLISHED"
-
 
 # ============================================================
 # 最终答案结构
@@ -136,7 +136,7 @@ def validate_decision_consistency(
         )
     ).upper()
 
-    if engine_status == DECISION_DEFINITE:
+    if engine_status == DEFINITE:
 
         forbidden = [
             "尚不能确认",
@@ -180,7 +180,7 @@ def validate_decision_consistency(
             if pattern in answer:
                 return False
 
-    if engine_status == DECISION_NOT_ESTABLISHED:
+    if engine_status == NOT_ESTABLISHED:
 
         # ========================================================
         # NOT_ESTABLISHED 语义边界
@@ -314,7 +314,7 @@ def validate_engine_condition_completeness(
             )
         )
 
-    if engine_decision == DECISION_CONDITIONAL:
+    if engine_decision == CONDITIONAL:
         return count == 8
 
     return count == 0 or count == 8

@@ -1,3 +1,9 @@
+from src.legal_constants import (
+    DEFINITE,
+    CONDITIONAL,
+    NOT_ESTABLISHED,
+)
+
 # -*- coding: utf-8 -*-
 
 """
@@ -86,17 +92,11 @@ from src.legal_answer_builder import (
 # Legal Decision Engine 状态常量
 # ============================================================
 
-DECISION_DEFINITE = "DEFINITE"
-
-DECISION_CONDITIONAL = "CONDITIONAL"
-
-DECISION_NOT_ESTABLISHED = "NOT_ESTABLISHED"
-
 
 VALID_ENGINE_DECISIONS = {
-    DECISION_DEFINITE,
-    DECISION_CONDITIONAL,
-    DECISION_NOT_ESTABLISHED,
+    DEFINITE,
+    CONDITIONAL,
+    NOT_ESTABLISHED,
 }
 
 

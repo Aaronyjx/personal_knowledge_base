@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from src.legal_constants import CONDITIONAL
+
 """
 RAG V6.1
 Legal Component Test
@@ -53,6 +55,14 @@ REQUIRED_CONDITIONS = list(
     _CANONICAL_RULE["conditions"]
 )
 
+EXCLUSION_CONDITIONS = list(
+    _CANONICAL_RULE["exclusion_conditions"]
+)
+
+EXCEPTION_CONDITIONS = list(
+    _CANONICAL_RULE["exceptions"]
+)
+
 from src.legal_pipeline import (
     run_decision_engine,
     run_answer_builder,
@@ -64,7 +74,6 @@ from src.legal_validator import (
 
 RAG_VERSION = "V6.1"
 
-DECISION_CONDITIONAL = "CONDITIONAL"
 
 ANSWER_CONDITIONAL = "CONDITIONAL"
 
@@ -166,7 +175,7 @@ def component_test():
         question=question,
     )
 
-    assert adapted["engine_decision"] == DECISION_CONDITIONAL, (
+    assert adapted["engine_decision"] == CONDITIONAL, (
         "V6.1 Component Test：Engine Decision 应为 CONDITIONAL"
     )
 
@@ -239,10 +248,10 @@ def component_test():
     forbidden_proofs = {
         REQUIRED_CONDITIONS[2],
         REQUIRED_CONDITIONS[3],
-        "不存在第三十九条规定情形",
-        "不存在第四十条第一项规定情形",
-        "不存在第四十条第二项规定情形",
-        "劳动者未提出订立固定期限劳动合同",
+        EXCLUSION_CONDITIONS[0],
+        EXCLUSION_CONDITIONS[1],
+        EXCLUSION_CONDITIONS[2],
+        EXCEPTION_CONDITIONS[0],
     }
 
     assert forbidden_proofs.issubset(

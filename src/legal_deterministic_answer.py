@@ -1,3 +1,9 @@
+from src.legal_constants import (
+    DEFINITE,
+    CONDITIONAL,
+    NOT_ESTABLISHED,
+)
+
 # -*- coding: utf-8 -*-
 
 """
@@ -59,12 +65,6 @@ from typing import Any, Dict, List
 # ============================================================
 # Decision 状态
 # ============================================================
-
-DECISION_DEFINITE = "DEFINITE"
-
-DECISION_CONDITIONAL = "CONDITIONAL"
-
-DECISION_NOT_ESTABLISHED = "NOT_ESTABLISHED"
 
 
 # ============================================================
@@ -472,7 +472,7 @@ def build_deterministic_conclusion(
     # DEFINITE
     # ========================================================
 
-    if engine_decision == DECISION_DEFINITE:
+    if engine_decision == DEFINITE:
 
         return (
             "Decision Engine 已确认当前满足相关法律条件，"
@@ -483,7 +483,7 @@ def build_deterministic_conclusion(
     # CONDITIONAL
     # ========================================================
 
-    if engine_decision == DECISION_CONDITIONAL:
+    if engine_decision == CONDITIONAL:
 
         lines = [
             "Decision Engine 判定当前法律结论为条件性结论。"
@@ -534,7 +534,7 @@ def build_deterministic_conclusion(
     # NOT_ESTABLISHED
     # ========================================================
 
-    if engine_decision == DECISION_NOT_ESTABLISHED:
+    if engine_decision == NOT_ESTABLISHED:
 
         lines = [
             "Decision Engine 已确认当前不能认定满足相关法律条件。"

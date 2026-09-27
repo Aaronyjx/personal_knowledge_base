@@ -1,3 +1,9 @@
+from src.legal_constants import (
+    DEFINITE,
+    CONDITIONAL,
+    NOT_ESTABLISHED,
+)
+
 # -*- coding: utf-8 -*-
 
 """
@@ -96,8 +102,6 @@ from src.legal_decision_engine import (
 # ============================================================
 # Legal Decision Engine 状态
 # ============================================================
-
-DECISION_CONDITIONAL = "CONDITIONAL"
 
 
 def validate_answer_structure(
@@ -507,7 +511,7 @@ def validate_conditional_state(
         )
     ).upper()
 
-    if engine_status != DECISION_CONDITIONAL:
+    if engine_status != CONDITIONAL:
         return True
 
     # CONDITIONAL 状态必须保留条件性。

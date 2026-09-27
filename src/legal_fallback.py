@@ -1,3 +1,9 @@
+from src.legal_constants import (
+    DEFINITE,
+    CONDITIONAL,
+    NOT_ESTABLISHED,
+)
+
 # -*- coding: utf-8 -*-
 
 """
@@ -80,12 +86,6 @@ from src.legal_rule_builder import (
 # ============================================================
 # Decision 状态
 # ============================================================
-
-DECISION_DEFINITE = "DEFINITE"
-
-DECISION_CONDITIONAL = "CONDITIONAL"
-
-DECISION_NOT_ESTABLISHED = "NOT_ESTABLISHED"
 
 
 # ============================================================
@@ -996,7 +996,7 @@ def build_fallback_answer(
     # 不重新进行法律推理。
     # ========================================================
 
-    if engine_decision == DECISION_CONDITIONAL:
+    if engine_decision == CONDITIONAL:
 
         if satisfied:
 
@@ -1040,7 +1040,7 @@ def build_fallback_answer(
                 + "。"
             )
 
-    elif engine_decision == DECISION_DEFINITE:
+    elif engine_decision == DEFINITE:
 
         # ----------------------------------------------------
         # DEFINITE：
@@ -1077,7 +1077,7 @@ def build_fallback_answer(
                 "当前属于确定性结论（DEFINITE）。"
             ]
 
-    elif engine_decision == DECISION_NOT_ESTABLISHED:
+    elif engine_decision == NOT_ESTABLISHED:
 
         conclusion_lines = [
             "根据 Decision Engine 已确认的结构化法律条件，"
@@ -1861,13 +1861,13 @@ def build_fallback_answer(
         "7. 法律后果："
     )
 
-    if engine_decision == DECISION_CONDITIONAL:
+    if engine_decision == CONDITIONAL:
 
         analysis_lines.append(
             "- 当前属于条件性结论，在关键事实尚未确认之前，不能直接将条件性 Decision 转换为确定性结论。"
         )
 
-    elif engine_decision == DECISION_DEFINITE:
+    elif engine_decision == DEFINITE:
 
         # ----------------------------------------------------
         # DEFINITE：
@@ -1904,7 +1904,7 @@ def build_fallback_answer(
                 "但 Structured Rules 未提供具体 legal_obligations 或 legal_consequences。"
             )
 
-    elif engine_decision == DECISION_NOT_ESTABLISHED:
+    elif engine_decision == NOT_ESTABLISHED:
 
         analysis_lines.append(
             "- 根据 Decision Engine 的 NOT_ESTABLISHED 结论，"
