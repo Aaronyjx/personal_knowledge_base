@@ -978,7 +978,6 @@ def answer_question(
     # ========================================================
 
     print("\n" + "=" * 70)
-    print("DEBUG / Ollama Raw Answer")
     print("=" * 70)
     print(answer)
     print("=" * 70)
@@ -990,7 +989,6 @@ def answer_question(
 
     print()
     print("=" * 70)
-    print("DEBUG / Deterministic User Facts Injected")
     print("=" * 70)
     print(answer)
     print("=" * 70)
@@ -1052,7 +1050,6 @@ def answer_question(
 
     print()
     print("=" * 70)
-    print("DEBUG / Deterministic Condition Analysis Injected")
     print("=" * 70)
     print(answer)
     print("=" * 70)
@@ -1081,11 +1078,9 @@ def answer_question(
 
     print()
     print("=" * 70)
-    print("DEBUG / BEFORE final_validation")
     print("=" * 70)
     print(answer)
     print()
-    print("DEBUG / BEFORE final_validation Section Counts")
 
     for section in [
         "【结论】",
@@ -1163,7 +1158,6 @@ def answer_question(
 
     print()
     print("=" * 70)
-    print("DEBUG / After Replace Deterministic Notices")
     print("=" * 70)
     print(answer)
     print("=" * 70)

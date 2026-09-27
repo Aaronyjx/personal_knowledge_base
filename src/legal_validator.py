@@ -632,7 +632,6 @@ def final_validation(
 
     print()
     print("=" * 70)
-    print("DEBUG / Final Validation Input")
     print("=" * 70)
 
     print(answer)

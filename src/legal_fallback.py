@@ -323,7 +323,6 @@ def build_fallback_answer(
 
     print()
     print("----------------------------------------------------------------------")
-    print("DEBUG / Fallback Decision Fields")
     print("----------------------------------------------------------------------")
     print("decision keys:")
     print(list(decision.keys()))
