@@ -624,12 +624,9 @@ def _condition_to_view(
             get_value(
                 condition_result,
                 "type",
-                REQUIRED,
+                "",
             )
         )
-
-    if not condition_type:
-        condition_type = REQUIRED
 
     return ConditionView(
         condition=condition,

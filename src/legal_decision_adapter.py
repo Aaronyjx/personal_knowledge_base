@@ -365,9 +365,36 @@ def build_fact_condition_mappings(
     )
 
     canonical_rule = get_rule(RULE_ID)
+
     canonical_conditions = canonical_rule["conditions"]
+    canonical_exclusion_conditions = (
+        canonical_rule["exclusion_conditions"]
+    )
+    canonical_exception_conditions = (
+        canonical_rule["exceptions"]
+    )
+
+    # ========================================================
+    # V6.1：集中建立语义条件别名
+    #
+    # 条件来源仍然唯一来自 Canonical Rule Registry。
+    # 这里不重新定义条件，也不改变条件顺序。
+    #
+    # 目的：
+    #   将 positional coupling 集中在本映射区域，
+    #   避免业务逻辑直接散落使用 canonical_conditions[N]。
+    # ========================================================
 
     target_condition = canonical_conditions[0]
+
+    renewal_condition = canonical_conditions[2]
+    worker_agreement_condition = canonical_conditions[3]
+
+    article_39_condition = canonical_exclusion_conditions[0]
+    article_40_1_condition = canonical_exclusion_conditions[1]
+    article_40_2_condition = canonical_exclusion_conditions[2]
+
+    fixed_term_exception_condition = canonical_exception_conditions[0]
 
     for rule in normalized_rules:
 
@@ -398,12 +425,12 @@ def build_fact_condition_mappings(
                         "连续订立二次固定期限劳动合同的最低数量门槛。"
                     ),
                     "does_not_prove": [
-                        canonical_conditions[2],
-                        canonical_conditions[3],
-                        "不存在第三十九条规定情形",
-                        "不存在第四十条第一项规定情形",
-                        "不存在第四十条第二项规定情形",
-                        "劳动者未提出订立固定期限劳动合同",
+                        renewal_condition,
+                        worker_agreement_condition,
+                        article_39_condition,
+                        article_40_1_condition,
+                        article_40_2_condition,
+                        fixed_term_exception_condition,
                     ],
                 }
             ]

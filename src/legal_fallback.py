@@ -163,8 +163,8 @@ def build_fallback_answer(
 
         1. 正确读取 not_satisfied_conditions。
         2. REQUIRED 的 NOT_SATISFIED 才进入“不满足必备条件”。
-        3. EXCLUSION 的 NOT_SATISFIED 进入“已触发排除条件”。
-        4. EXCEPTION 的 NOT_SATISFIED 进入“已触发例外条件”。
+        3. EXCLUSION 的 SATISFIED 进入“已触发排除条件”。
+        4. EXCEPTION 的 SATISFIED 进入“已触发例外条件”。
         5. UNKNOWN 条件逐项保留。
         6. 不再把 EXCLUSION 错误写成“未满足条件”。
         7. 不再把 UNKNOWN 条件错误写成“尚未确认的必备条件”。
@@ -569,7 +569,7 @@ def build_fallback_answer(
         status = normalize_text(
             item.get(
                 "status",
-                "UNKNOWN",
+                "",
             )
         ).upper()
 
@@ -649,7 +649,7 @@ def build_fallback_answer(
         status = normalize_text(
             item.get(
                 "status",
-                "UNKNOWN",
+                "",
             )
         ).upper()
 
@@ -693,12 +693,12 @@ def build_fallback_answer(
     # EXCLUSION 的语义：
     #
     #     SATISFIED
-    #         = 排除情形不存在 / 未触发
-    #
-    #     NOT_SATISFIED
     #         = 排除情形存在 / 已触发
     #
-    # 因此这里只收集 NOT_SATISFIED。
+    #     NOT_SATISFIED
+    #         = 排除情形不存在 / 未触发
+    #
+    # 因此这里只收集 SATISFIED。
     # --------------------------------------------------------
 
     triggered_exclusions = []
@@ -718,17 +718,14 @@ def build_fallback_answer(
         status = normalize_text(
             item.get(
                 "status",
-                "UNKNOWN",
+                "",
             )
         ).upper()
 
         if not condition:
             continue
 
-        if status in {
-            "NOT_SATISFIED",
-            "UNSATISFIED",
-        }:
+        if status == "SATISFIED":
             triggered_exclusions.append(
                 condition
             )
@@ -756,7 +753,7 @@ def build_fallback_answer(
     # --------------------------------------------------------
     # 未触发排除条件
     #
-    # EXCLUSION + SATISFIED
+    # EXCLUSION + NOT_SATISFIED
     #     = 排除情形不存在，因此没有触发排除条件。
     #
     # 这里仅用于最终自然语言展示。
@@ -779,14 +776,17 @@ def build_fallback_answer(
         status = normalize_text(
             item.get(
                 "status",
-                "UNKNOWN",
+                "",
             )
         ).upper()
 
         if not condition:
             continue
 
-        if status == "SATISFIED":
+        if status in {
+            "NOT_SATISFIED",
+            "UNSATISFIED",
+        }:
 
             untriggered_exclusions.append(
                 condition
@@ -802,12 +802,12 @@ def build_fallback_answer(
     # EXCEPTION 的语义：
     #
     #     SATISFIED
-    #         = 例外情形不存在 / 未触发
-    #
-    #     NOT_SATISFIED
     #         = 例外情形存在 / 已触发
     #
-    # 因此这里只收集 NOT_SATISFIED。
+    #     NOT_SATISFIED
+    #         = 例外情形不存在 / 未触发
+    #
+    # 因此这里只收集 SATISFIED。
     # ========================================================
 
     triggered_exceptions = []
@@ -827,17 +827,14 @@ def build_fallback_answer(
         status = normalize_text(
             item.get(
                 "status",
-                "UNKNOWN",
+                "",
             )
         ).upper()
 
         if not condition:
             continue
 
-        if status in {
-            "NOT_SATISFIED",
-            "UNSATISFIED",
-        }:
+        if status == "SATISFIED":
             triggered_exceptions.append(
                 condition
             )
@@ -865,7 +862,7 @@ def build_fallback_answer(
     # --------------------------------------------------------
     # 未触发例外条件
     #
-    # EXCEPTION + SATISFIED
+    # EXCEPTION + NOT_SATISFIED
     #     = 例外情形不存在，因此没有触发例外条件。
     #
     # 这里仅用于最终自然语言展示。
@@ -888,14 +885,17 @@ def build_fallback_answer(
         status = normalize_text(
             item.get(
                 "status",
-                "UNKNOWN",
+                "",
             )
         ).upper()
 
         if not condition:
             continue
 
-        if status == "SATISFIED":
+        if status in {
+            "NOT_SATISFIED",
+            "UNSATISFIED",
+        }:
 
             untriggered_exceptions.append(
                 condition
@@ -1304,7 +1304,7 @@ def build_fallback_answer(
         status = normalize_text(
             item.get(
                 "status",
-                "UNKNOWN",
+                "",
             )
         ).upper()
 
@@ -1313,7 +1313,7 @@ def build_fallback_answer(
                 "condition_type",
                 item.get(
                     "type",
-                    "REQUIRED",
+                    "",
                 ),
             )
         ).upper()
@@ -1415,16 +1415,16 @@ def build_fallback_answer(
             },
 
             "EXCLUSION": {
-                "SATISFIED": "未触发",
-                "NOT_SATISFIED": "已触发",
-                "UNSATISFIED": "已触发",
+                "SATISFIED": "已触发",
+                "NOT_SATISFIED": "未触发",
+                "UNSATISFIED": "未触发",
                 "UNKNOWN": "尚未确认",
             },
 
             "EXCEPTION": {
-                "SATISFIED": "未触发",
-                "NOT_SATISFIED": "已触发",
-                "UNSATISFIED": "已触发",
+                "SATISFIED": "已触发",
+                "NOT_SATISFIED": "未触发",
+                "UNSATISFIED": "未触发",
                 "UNKNOWN": "尚未确认",
             },
         }
@@ -1435,7 +1435,7 @@ def build_fallback_answer(
 
         category_map = semantic_map.get(
             category,
-            semantic_map["REQUIRED"],
+            {},
         )
 
         for item in items:
@@ -1453,7 +1453,7 @@ def build_fallback_answer(
             status = normalize_text(
                 item.get(
                     "status",
-                    "UNKNOWN",
+                    "",
                 )
             ).upper()
 
@@ -1680,7 +1680,7 @@ def build_fallback_answer(
     # --------------------------------------------------------
     # 未触发排除条件
     #
-    # EXCLUSION + SATISFIED
+    # EXCLUSION + NOT_SATISFIED
     # 表示排除情形不存在，因此排除条件没有被触发。
     #
     # 不能将其显示为“已满足条件”。
@@ -1723,7 +1723,7 @@ def build_fallback_answer(
     # --------------------------------------------------------
     # 未触发例外条件
     #
-    # EXCEPTION + SATISFIED
+    # EXCEPTION + NOT_SATISFIED
     # 表示例外情形不存在，因此例外条件没有被触发。
     #
     # 不能将其显示为“已满足条件”。
@@ -1772,7 +1772,7 @@ def build_fallback_answer(
         status = normalize_text(
             item.get(
                 "status",
-                "UNKNOWN",
+                "",
             )
         ).upper()
 
@@ -1805,7 +1805,7 @@ def build_fallback_answer(
         status = normalize_text(
             item.get(
                 "status",
-                "UNKNOWN",
+                "",
             )
         ).upper()
 

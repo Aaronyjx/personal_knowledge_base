@@ -429,16 +429,13 @@ def build_deterministic_conclusion(
         # ----------------------------------------------------
         # EXCLUSION
         #
-        # EXCLUSION + NOT_SATISFIED
+        # EXCLUSION + SATISFIED
         # = 排除条件已经触发
         # ----------------------------------------------------
 
         elif condition_type == "EXCLUSION":
 
-            if status in {
-                "NOT_SATISFIED",
-                ANSWER_UNSATISFIED,
-            }:
+            if status == ANSWER_SATISFIED:
 
                 triggered_exclusions.append(
                     condition
@@ -453,16 +450,13 @@ def build_deterministic_conclusion(
         # ----------------------------------------------------
         # EXCEPTION
         #
-        # EXCEPTION + NOT_SATISFIED
+        # EXCEPTION + SATISFIED
         # = 例外条件已经触发
         # ----------------------------------------------------
 
         elif condition_type == "EXCEPTION":
 
-            if status in {
-                "NOT_SATISFIED",
-                ANSWER_UNSATISFIED,
-            }:
+            if status == ANSWER_SATISFIED:
 
                 triggered_exceptions.append(
                     condition
