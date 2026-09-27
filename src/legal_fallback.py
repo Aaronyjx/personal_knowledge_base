@@ -341,9 +341,6 @@ def build_fallback_answer(
     print(decision.get("satisfied_conditions"))
 
     print()
-    print("required_satisfied_conditions:")
-    print(decision.get("required_satisfied_conditions"))
-
     rules = build_rules_from_articles(
         ensure_list(
             decision.get(
@@ -605,19 +602,6 @@ def build_fallback_answer(
     #
     # 仍然不重新推理。
     # --------------------------------------------------------
-
-    if not satisfied:
-
-        required_satisfied_conditions = unique_texts(
-            ensure_list(
-                decision.get(
-                    "required_satisfied_conditions",
-                    [],
-                )
-            )
-        )
-
-        satisfied = required_satisfied_conditions
 
     # ========================================================
     # 从分类结果中提取：

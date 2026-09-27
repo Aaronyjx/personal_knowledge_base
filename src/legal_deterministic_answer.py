@@ -391,7 +391,7 @@ def build_deterministic_conclusion(
                 "condition_type",
                 item.get(
                     "type",
-                    "REQUIRED",
+                    "",
                 ),
             )
         ).upper()

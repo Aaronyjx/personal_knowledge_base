@@ -119,12 +119,12 @@ def extract_engine_decision(
     if value in VALID_ENGINE_DECISIONS:
         return value
 
-    # 如果 Decision Engine 没有明确返回状态，
-    # 默认按照 CONDITIONAL 处理。
+    # 如果 Decision Engine 没有返回有效 Decision，
+    # Adapter 不得擅自制造 CONDITIONAL。
     #
-    # 这样比擅自判断为 DEFINITE 更安全。
+    # 返回空字符串，由调用方执行完整性检查。
 
-    return DECISION_CONDITIONAL
+    return ""
 
 def extract_condition_value(
     condition: Any,

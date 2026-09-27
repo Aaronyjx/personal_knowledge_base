@@ -265,7 +265,7 @@ def inject_deterministic_user_facts(
     # ========================================================
 
     next_section_pattern = re.compile(
-        r"\n(?=【[^】]+】)",
+        r"\n(?=【(?:结论|法律依据|法律分析|需要注意)】)",
     )
 
     section_match = next_section_pattern.search(
