@@ -955,8 +955,13 @@ def build_ollama_prompt(
                     "",
                 )
 
-                status = mapping.get(
-                    "status",
+                mapping_type = mapping.get(
+                    "mapping_type",
+                    "",
+                )
+
+                dependency = mapping.get(
+                    "dependency",
                     "",
                 )
 
@@ -974,9 +979,15 @@ def build_ollama_prompt(
                     "",
                 )
 
-                status = getattr(
+                mapping_type = getattr(
                     mapping,
-                    "status",
+                    "mapping_type",
+                    "",
+                )
+
+                dependency = getattr(
+                    mapping,
+                    "dependency",
                     "",
                 )
 
@@ -984,7 +995,8 @@ def build_ollama_prompt(
                 f"{index}. "
                 f"fact={fact}; "
                 f"condition={condition}; "
-                f"status={status}\n"
+                f"mapping_type={mapping_type}; "
+                f"dependency={dependency}\n"
             )
 
     else:

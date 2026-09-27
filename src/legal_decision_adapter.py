@@ -388,7 +388,6 @@ def build_fact_condition_mappings(
                 {
                     "fact": "公司连续签订三次固定期限劳动合同",
                     "condition": target_condition,
-                    "status": "SATISFIED",
                     "mapping_type": "NUMERIC_THRESHOLD",
                     "dependency": (
                         "THREE_CONTRACTS_MEET_TWO_CONTRACT_THRESHOLD"

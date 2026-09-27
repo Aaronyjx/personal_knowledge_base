@@ -33,6 +33,9 @@ from src.legal_common import (
 
 from src.legal_decision_adapter import (
     _condition_text,
+)
+
+from src.legal_context_builder import (
     build_structured_context,
 )
 
@@ -210,19 +213,19 @@ def component_test():
     )
 
     assert normalize_text(
-        three_mapping.get("status", "")
-    ).upper() == "SATISFIED", (
-        "V6.1 Component Test：三次→二次数量门槛必须为 SATISFIED"
-    )
-
-    assert normalize_text(
         three_mapping.get("mapping_type", "")
     ) == "NUMERIC_THRESHOLD", (
         "V6.1 Component Test：映射类型必须为 NUMERIC_THRESHOLD"
     )
 
+    assert normalize_text(
+        three_mapping.get("dependency", "")
+    ) == "THREE_CONTRACTS_MEET_TWO_CONTRACT_THRESHOLD", (
+        "V6.1 Component Test：缺少“三次→二次”的数量门槛依赖关系"
+    )
+
     print(
-        "✅ Test 2：三次固定期限合同 → 连续订立二次固定期限劳动合同 = SATISFIED"
+        "✅ Test 2：三次固定期限合同 → 连续订立二次固定期限劳动合同数量门槛映射正确"
     )
 
     # --------------------------------------------------------
