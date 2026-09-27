@@ -85,6 +85,9 @@ from src.legal_decision_adapter import (
     extract_engine_decision,
     merge_rules_into_decision,
     build_fact_condition_mappings,
+)
+
+from src.legal_context_builder import (
     build_structured_context,
 )
 
