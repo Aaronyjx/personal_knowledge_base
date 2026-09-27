@@ -54,6 +54,12 @@ Legal Pipeline Orchestration
 文件名不包含版本号。
 """
 
+from src.legal_constants import (
+    REQUIRED,
+    EXCLUSION,
+    EXCEPTION,
+)
+
 from typing import Any, Dict, List
 
 
@@ -550,7 +556,7 @@ def run_answer_builder(
         if isinstance(item, dict)
         and item.get(
             "condition_type"
-        ) == "REQUIRED"
+        ) == REQUIRED
     ]
 
     adapted[
@@ -566,7 +572,7 @@ def run_answer_builder(
         if isinstance(item, dict)
         and item.get(
             "condition_type"
-        ) == "EXCLUSION"
+        ) == EXCLUSION
     ]
 
     adapted[
@@ -582,7 +588,7 @@ def run_answer_builder(
         if isinstance(item, dict)
         and item.get(
             "condition_type"
-        ) == "EXCEPTION"
+        ) == EXCEPTION
     ]
 
     # ========================================================

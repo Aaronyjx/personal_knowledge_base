@@ -7,6 +7,10 @@ Legal Prompt Builder
 包含：build_deterministic_engine_state_block()、build_ollama_prompt()
 """
 
+from src.legal_constants import (
+    UNKNOWN,
+)
+
 from typing import Any, Dict, List
 
 def build_deterministic_engine_state_block(
@@ -370,7 +374,7 @@ def build_ollama_prompt(
 
     engine_decision = decision.get(
         "engine_decision",
-        decision.get("decision", "UNKNOWN"),
+        decision.get("decision", UNKNOWN),
     )
 
     prompt_parts.append(

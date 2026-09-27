@@ -1,9 +1,3 @@
-from src.legal_constants import (
-    DEFINITE,
-    CONDITIONAL,
-    NOT_ESTABLISHED,
-)
-
 # -*- coding: utf-8 -*-
 
 """
@@ -57,6 +51,15 @@ Answer Builder / Structured Context 所需要的数据结构。
 
 ============================================================
 """
+
+from src.legal_constants import (
+    DEFINITE,
+    CONDITIONAL,
+    NOT_ESTABLISHED,
+    REQUIRED,
+    EXCLUSION,
+    EXCEPTION,
+)
 
 from typing import Any, Dict, List
 
@@ -229,19 +232,19 @@ def _condition_category_map(
         rules,
         ["conditions", "required_conditions"],
     ):
-        mapping[condition] = "REQUIRED"
+        mapping[condition] = REQUIRED
 
     for condition in _condition_list_from_rule(
         rules,
         ["exclusion_conditions", "exclusions"],
     ):
-        mapping[condition] = "EXCLUSION"
+        mapping[condition] = EXCLUSION
 
     for condition in _condition_list_from_rule(
         rules,
         ["exceptions", "exception_conditions"],
     ):
-        mapping[condition] = "EXCEPTION"
+        mapping[condition] = EXCEPTION
 
     return mapping
 

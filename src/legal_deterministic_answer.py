@@ -1,9 +1,3 @@
-from src.legal_constants import (
-    DEFINITE,
-    CONDITIONAL,
-    NOT_ESTABLISHED,
-)
-
 # -*- coding: utf-8 -*-
 
 """
@@ -59,6 +53,17 @@ Legal Deterministic Answer Layer
 ============================================================
 """
 
+from src.legal_constants import (
+    DEFINITE,
+    CONDITIONAL,
+    NOT_ESTABLISHED,
+    SATISFIED,
+    UNKNOWN,
+    REQUIRED,
+    EXCLUSION,
+    EXCEPTION,
+)
+
 from typing import Any, Dict, List
 
 
@@ -71,11 +76,9 @@ from typing import Any, Dict, List
 # Answer Condition 状态
 # ============================================================
 
-ANSWER_SATISFIED = "SATISFIED"
 
 ANSWER_UNSATISFIED = "UNSATISFIED"
 
-ANSWER_UNKNOWN = "UNKNOWN"
 
 
 # ============================================================
@@ -403,9 +406,9 @@ def build_deterministic_conclusion(
         # REQUIRED
         # ----------------------------------------------------
 
-        if condition_type == "REQUIRED":
+        if condition_type == REQUIRED:
 
-            if status == ANSWER_SATISFIED:
+            if status == SATISFIED:
 
                 required_satisfied.append(
                     condition
@@ -413,14 +416,14 @@ def build_deterministic_conclusion(
 
             elif status in {
                 "NOT_SATISFIED",
-                ANSWER_UNSATISFIED,
+                "UNSATISFIED",
             }:
 
                 required_not_satisfied.append(
                     condition
                 )
 
-            elif status == ANSWER_UNKNOWN:
+            elif status == UNKNOWN:
 
                 unknown_conditions.append(
                     condition
@@ -433,15 +436,15 @@ def build_deterministic_conclusion(
         # = 排除条件已经触发
         # ----------------------------------------------------
 
-        elif condition_type == "EXCLUSION":
+        elif condition_type == EXCLUSION:
 
-            if status == ANSWER_SATISFIED:
+            if status == SATISFIED:
 
                 triggered_exclusions.append(
                     condition
                 )
 
-            elif status == ANSWER_UNKNOWN:
+            elif status == UNKNOWN:
 
                 unknown_conditions.append(
                     condition
@@ -454,15 +457,15 @@ def build_deterministic_conclusion(
         # = 例外条件已经触发
         # ----------------------------------------------------
 
-        elif condition_type == "EXCEPTION":
+        elif condition_type == EXCEPTION:
 
-            if status == ANSWER_SATISFIED:
+            if status == SATISFIED:
 
                 triggered_exceptions.append(
                     condition
                 )
 
-            elif status == ANSWER_UNKNOWN:
+            elif status == UNKNOWN:
 
                 unknown_conditions.append(
                     condition

@@ -457,3 +457,5 @@ def component_test():
 
     return adapted
 
+if __name__ == "__main__":
+    component_test()

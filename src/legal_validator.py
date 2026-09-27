@@ -1,9 +1,3 @@
-from src.legal_constants import (
-    DEFINITE,
-    CONDITIONAL,
-    NOT_ESTABLISHED,
-)
-
 # -*- coding: utf-8 -*-
 
 """
@@ -43,6 +37,18 @@ Legal Validation Layer
     不得在验证阶段重新推导法律结论。
 ============================================================
 """
+
+from src.legal_constants import (
+    DEFINITE,
+    CONDITIONAL,
+    NOT_ESTABLISHED,
+    SATISFIED,
+    NOT_SATISFIED,
+    UNKNOWN,
+    REQUIRED,
+    EXCLUSION,
+    EXCEPTION,
+)
 
 import re
 from typing import Any, Dict, List
@@ -346,9 +352,9 @@ def validate_condition_categories(
         return False
 
     counts = {
-        "REQUIRED": 0,
-        "EXCLUSION": 0,
-        "EXCEPTION": 0,
+        REQUIRED: 0,
+        EXCLUSION: 0,
+        EXCEPTION: 0,
     }
 
     names = set()
@@ -380,9 +386,9 @@ def validate_condition_categories(
             return False
 
         if status not in {
-            "SATISFIED",
-            "NOT_SATISFIED",
-            "UNKNOWN",
+            SATISFIED,
+            NOT_SATISFIED,
+            UNKNOWN,
             "UNSATISFIED",
         }:
             return False
@@ -394,9 +400,9 @@ def validate_condition_categories(
         counts[category] += 1
 
     return counts == {
-        "REQUIRED": 4,
-        "EXCLUSION": 3,
-        "EXCEPTION": 1,
+        REQUIRED: 4,
+        EXCLUSION: 3,
+        EXCEPTION: 1,
     }
 
 

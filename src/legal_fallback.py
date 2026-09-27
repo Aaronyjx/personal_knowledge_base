@@ -1,9 +1,3 @@
-from src.legal_constants import (
-    DEFINITE,
-    CONDITIONAL,
-    NOT_ESTABLISHED,
-)
-
 # -*- coding: utf-8 -*-
 
 """
@@ -59,6 +53,18 @@ Deterministic Structured Answer
 其中 legal_validator 对 legal_fallback 的导入采用局部导入，
 因此这里可以安全复用 clean_answer，而不形成模块初始化时的循环依赖。
 """
+
+from src.legal_constants import (
+    DEFINITE,
+    CONDITIONAL,
+    NOT_ESTABLISHED,
+    SATISFIED,
+    NOT_SATISFIED,
+    UNKNOWN,
+    REQUIRED,
+    EXCLUSION,
+    EXCEPTION,
+)
 
 # ============================================================
 # 标准库
@@ -407,7 +413,7 @@ def build_fallback_answer(
             )
         ).upper()
 
-        if condition_type == "REQUIRED":
+        if condition_type == REQUIRED:
             required_results.append(
                 item
             )
@@ -450,7 +456,7 @@ def build_fallback_answer(
                 )
             ).upper()
 
-            if condition_type == "EXCLUSION":
+            if condition_type == EXCLUSION:
                 exclusion_results.append(
                     item
                 )
@@ -493,7 +499,7 @@ def build_fallback_answer(
                 )
             ).upper()
 
-            if condition_type == "EXCEPTION":
+            if condition_type == EXCEPTION:
                 exception_results.append(
                     item
                 )
@@ -583,8 +589,8 @@ def build_fallback_answer(
             continue
 
         if (
-            condition_type == "REQUIRED"
-            and status == "SATISFIED"
+            condition_type == REQUIRED
+            and status == SATISFIED
         ):
 
             satisfied.append(
@@ -708,7 +714,7 @@ def build_fallback_answer(
         if not condition:
             continue
 
-        if status == "SATISFIED":
+        if status == SATISFIED:
             triggered_exclusions.append(
                 condition
             )
@@ -817,7 +823,7 @@ def build_fallback_answer(
         if not condition:
             continue
 
-        if status == "SATISFIED":
+        if status == SATISFIED:
             triggered_exceptions.append(
                 condition
             )
@@ -1761,7 +1767,7 @@ def build_fallback_answer(
 
         if (
             condition
-            and status == "UNKNOWN"
+            and status == UNKNOWN
         ):
             exclusion_unknown_conditions.append(
                 condition
@@ -1794,7 +1800,7 @@ def build_fallback_answer(
 
         if (
             condition
-            and status == "UNKNOWN"
+            and status == UNKNOWN
         ):
             exception_unknown_conditions.append(
                 condition
