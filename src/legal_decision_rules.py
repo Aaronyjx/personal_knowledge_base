@@ -63,45 +63,6 @@ from src.legal_rule_registry import get_rule
 
 
 # ============================================================
-# Canonical Condition Compatibility Aliases
-# ============================================================
-#
-# 保持原有公开常量名称不变，避免影响 Decision Engine、
-# Component Test 以及其它现有调用方。
-#
-# Canonical Condition Identity 的唯一来源仍然是：
-#
-#     legal_rule_definition.py
-#              ↓
-#     legal_rule_registry.py
-#              ↓
-#     legal_decision_rules.py
-#
-# 本模块不再直接导入 Canonical Condition 列表。
-# ============================================================
-
-_canonical_rule = get_rule(RULE_ID)
-
-REQUIRED_CONDITIONS = list(
-    _canonical_rule["conditions"]
-)
-
-EXCLUSION_CONDITIONS = list(
-    _canonical_rule["exclusion_conditions"]
-)
-
-EXCEPTION_CONDITIONS = list(
-    _canonical_rule["exceptions"]
-)
-
-ALL_CONDITIONS = (
-    REQUIRED_CONDITIONS
-    + EXCLUSION_CONDITIONS
-    + EXCEPTION_CONDITIONS
-)
-
-
-# ============================================================
 # Article 14 / Labor Contract Law Identity
 # ============================================================
 
