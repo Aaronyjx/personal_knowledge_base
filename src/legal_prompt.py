@@ -92,7 +92,7 @@ def build_deterministic_engine_state_block(
         "engine_decision",
         decision.get(
             "decision",
-            "UNKNOWN",
+            UNKNOWN,
         ),
     )
 

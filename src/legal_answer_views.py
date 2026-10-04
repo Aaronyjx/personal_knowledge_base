@@ -508,7 +508,7 @@ def build_plain_answer(
 
     lines.append(
         structured_answer.engine_version
-        or "UNKNOWN"
+        or UNKNOWN
     )
 
     lines.append(

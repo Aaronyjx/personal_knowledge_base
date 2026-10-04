@@ -2,6 +2,9 @@ from src.legal_constants import (
     DEFINITE,
     CONDITIONAL,
     NOT_ESTABLISHED,
+    SATISFIED,
+    NOT_SATISFIED,
+    UNKNOWN,
 )
 
 # -*- coding: utf-8 -*-
@@ -787,7 +790,7 @@ def validate_unknown_conditions(
     if not unknown:
 
         extra_unknown_patterns = [
-            "UNKNOWN",
+            UNKNOWN,
             "unknown",
             "未知",
             "未确定",
@@ -888,7 +891,7 @@ def validate_unknown_conditions(
     # --------------------------------------------------------
 
     unresolved_patterns = [
-        "UNKNOWN",
+        UNKNOWN,
         "unknown",
         "未知",
         "未确定",
@@ -1152,7 +1155,7 @@ def validate_unknown_conditions(
         # ----------------------------------------------------
 
         satisfied_patterns = [
-            "SATISFIED",
+            SATISFIED,
             "状态为SATISFIED",
             "状态：SATISFIED",
             "状态:Satisfied",
@@ -1166,7 +1169,7 @@ def validate_unknown_conditions(
         ]
 
         not_satisfied_patterns = [
-            "NOT_SATISFIED",
+            NOT_SATISFIED,
             "状态为NOT_SATISFIED",
             "状态：NOT_SATISFIED",
             "状态:NOT_SATISFIED",
@@ -1183,7 +1186,7 @@ def validate_unknown_conditions(
         ]
 
         unresolved_patterns_local = [
-            "UNKNOWN",
+            UNKNOWN,
             "状态为UNKNOWN",
             "状态：UNKNOWN",
             "状态:UNKNOWN",
@@ -1310,7 +1313,7 @@ def validate_unknown_conditions(
                     strong_satisfied = any(
                         pattern in context
                         for pattern in [
-                            "SATISFIED",
+                            SATISFIED,
                             "状态为SATISFIED",
                             "状态：SATISFIED",
                             "已满足条件",
@@ -1330,7 +1333,7 @@ def validate_unknown_conditions(
                     strong_not_satisfied = any(
                         pattern in context
                         for pattern in [
-                            "NOT_SATISFIED",
+                            NOT_SATISFIED,
                             "状态为NOT_SATISFIED",
                             "状态：NOT_SATISFIED",
                             "UNSATISFIED",
