@@ -636,38 +636,6 @@ def final_validation(
     # 这里只是诊断代码，不修改 answer。
     # ========================================================
 
-    print()
-    print("=" * 70)
-    print("=" * 70)
-
-    print(answer)
-
-    print()
-    print("DEBUG / Section Counts")
-
-    for section in REQUIRED_SECTIONS:
-        print(
-            f"{section}: "
-            f"{answer.count(section)}"
-        )
-
-    print()
-    print("DEBUG / Section Positions")
-
-    for section in REQUIRED_SECTIONS:
-        print(
-            f"{section}: "
-            f"{answer.find(section)}"
-        )
-
-    print()
-    print(
-        "DEBUG / validate_answer_structure:",
-        validate_answer_structure(answer),
-    )
-
-    print("=" * 70)
-
     failures = run_checks(
         answer,
         question,

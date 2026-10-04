@@ -547,40 +547,12 @@ def merge_rules_into_decision(
         + retriever_rules
     )
 
-    print("\n" + "-" * 70)
-    print("DEBUG / all_rules")
-    print("-" * 70)
-    print("all_rules type:", type(all_rules))
-    print(
-        "all_rules count:",
-        len(all_rules)
-        if isinstance(all_rules, (list, tuple, dict))
-        else "N/A",
-    )
-    print("all_rules:", all_rules)
-
     # --------------------------------------------------------
     # 统一构建结构化法律规则
     # --------------------------------------------------------
 
     adapted_decision["rules"] = build_rules_from_articles(
         all_rules
-    )
-
-    print("\n" + "-" * 70)
-    print("DEBUG / adapted_decision rules")
-    print("-" * 70)
-    print(
-        "rules type:",
-        type(adapted_decision.get("rules")),
-    )
-    print(
-        "rules count:",
-        len(adapted_decision.get("rules", [])),
-    )
-    print(
-        "rules:",
-        adapted_decision.get("rules"),
     )
 
     return adapted_decision
