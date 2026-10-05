@@ -76,6 +76,28 @@ from src.legal_rule_definition import RULE_ID
 from src.legal_rule_registry import get_rule
 
 _CANONICAL_RULE = get_rule(RULE_ID)
+
+
+# ============================================================
+# Stable Condition Identity
+# ============================================================
+
+CONDITION_TEXT_BY_ID = {
+    str(item["condition_id"]).strip(): str(item["condition"]).strip()
+    for item in _CANONICAL_RULE["condition_definitions"]
+}
+
+REQUIRED_001 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-001"]
+REQUIRED_002 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-002"]
+REQUIRED_003 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-003"]
+REQUIRED_004 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-004"]
+
+EXCLUSION_001 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCLUSION-001"]
+EXCLUSION_002 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCLUSION-002"]
+EXCLUSION_003 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCLUSION-003"]
+
+EXCEPTION_001 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCEPTION-001"]
+
 REQUIRED_CONDITIONS = list(_CANONICAL_RULE["conditions"])
 EXCLUSION_CONDITIONS = list(_CANONICAL_RULE["exclusion_conditions"])
 EXCEPTION_CONDITIONS = list(_CANONICAL_RULE["exceptions"])
@@ -435,25 +457,25 @@ def case_02_required_3_unknown():
 
     assert_status(
         status_map,
-        REQUIRED_CONDITIONS[0],
+        REQUIRED_001,
         SATISFIED,
     )
 
     assert_status(
         status_map,
-        REQUIRED_CONDITIONS[1],
+        REQUIRED_002,
         SATISFIED,
     )
 
     assert_status(
         status_map,
-        REQUIRED_CONDITIONS[2],
+        REQUIRED_003,
         UNKNOWN,
     )
 
     assert_status(
         status_map,
-        REQUIRED_CONDITIONS[3],
+        REQUIRED_004,
         UNKNOWN,
     )
 
@@ -465,7 +487,7 @@ def case_02_required_3_unknown():
 
     assert_status(
         status_map,
-        EXCEPTION_CONDITIONS[0],
+        EXCEPTION_001,
         UNKNOWN,
     )
 
@@ -512,13 +534,13 @@ def case_03_worker_agreement_unknown():
 
     assert_all_statuses(
         status_map,
-        REQUIRED_CONDITIONS[:3],
+        [REQUIRED_001, REQUIRED_002, REQUIRED_003],
         SATISFIED,
     )
 
     assert_status(
         status_map,
-        REQUIRED_CONDITIONS[3],
+        REQUIRED_004,
         UNKNOWN,
     )
 
@@ -530,7 +552,7 @@ def case_03_worker_agreement_unknown():
 
     assert_status(
         status_map,
-        EXCEPTION_CONDITIONS[0],
+        EXCEPTION_001,
         NOT_SATISFIED,
     )
 
@@ -577,25 +599,25 @@ def case_04_article_39_unknown():
 
     assert_status(
         status_map,
-        EXCLUSION_CONDITIONS[0],
+        EXCLUSION_001,
         UNKNOWN,
     )
 
     assert_status(
         status_map,
-        EXCLUSION_CONDITIONS[1],
+        EXCLUSION_002,
         NOT_SATISFIED,
     )
 
     assert_status(
         status_map,
-        EXCLUSION_CONDITIONS[2],
+        EXCLUSION_003,
         NOT_SATISFIED,
     )
 
     assert_status(
         status_map,
-        EXCEPTION_CONDITIONS[0],
+        EXCEPTION_001,
         NOT_SATISFIED,
     )
 
@@ -639,25 +661,25 @@ def case_05_article_40_1_unknown():
 
     assert_status(
         status_map,
-        EXCLUSION_CONDITIONS[0],
+        EXCLUSION_001,
         NOT_SATISFIED,
     )
 
     assert_status(
         status_map,
-        EXCLUSION_CONDITIONS[1],
+        EXCLUSION_002,
         UNKNOWN,
     )
 
     assert_status(
         status_map,
-        EXCLUSION_CONDITIONS[2],
+        EXCLUSION_003,
         NOT_SATISFIED,
     )
 
     assert_status(
         status_map,
-        EXCEPTION_CONDITIONS[0],
+        EXCEPTION_001,
         NOT_SATISFIED,
     )
 
@@ -701,25 +723,25 @@ def case_06_article_40_2_unknown():
 
     assert_status(
         status_map,
-        EXCLUSION_CONDITIONS[0],
+        EXCLUSION_001,
         NOT_SATISFIED,
     )
 
     assert_status(
         status_map,
-        EXCLUSION_CONDITIONS[1],
+        EXCLUSION_002,
         NOT_SATISFIED,
     )
 
     assert_status(
         status_map,
-        EXCLUSION_CONDITIONS[2],
+        EXCLUSION_003,
         UNKNOWN,
     )
 
     assert_status(
         status_map,
-        EXCEPTION_CONDITIONS[0],
+        EXCEPTION_001,
         NOT_SATISFIED,
     )
 
@@ -771,7 +793,7 @@ def case_07_exception_unknown():
 
     assert_status(
         status_map,
-        EXCEPTION_CONDITIONS[0],
+        EXCEPTION_001,
         UNKNOWN,
     )
 
@@ -823,25 +845,25 @@ def case_08_article_39_triggered():
 
     assert_status(
         status_map,
-        EXCLUSION_CONDITIONS[0],
+        EXCLUSION_001,
         SATISFIED,
     )
 
     assert_status(
         status_map,
-        EXCLUSION_CONDITIONS[1],
+        EXCLUSION_002,
         NOT_SATISFIED,
     )
 
     assert_status(
         status_map,
-        EXCLUSION_CONDITIONS[2],
+        EXCLUSION_003,
         NOT_SATISFIED,
     )
 
     assert_status(
         status_map,
-        EXCEPTION_CONDITIONS[0],
+        EXCEPTION_001,
         NOT_SATISFIED,
     )
 
@@ -893,25 +915,25 @@ def case_09_article_40_1_triggered():
 
     assert_status(
         status_map,
-        EXCLUSION_CONDITIONS[0],
+        EXCLUSION_001,
         NOT_SATISFIED,
     )
 
     assert_status(
         status_map,
-        EXCLUSION_CONDITIONS[1],
+        EXCLUSION_002,
         SATISFIED,
     )
 
     assert_status(
         status_map,
-        EXCLUSION_CONDITIONS[2],
+        EXCLUSION_003,
         NOT_SATISFIED,
     )
 
     assert_status(
         status_map,
-        EXCEPTION_CONDITIONS[0],
+        EXCEPTION_001,
         NOT_SATISFIED,
     )
 
@@ -968,7 +990,7 @@ def case_10_exception_triggered():
 
     assert_status(
         status_map,
-        EXCEPTION_CONDITIONS[0],
+        EXCEPTION_001,
         SATISFIED,
     )
 
@@ -1119,13 +1141,13 @@ def decision_isolation_check():
 
     assert_status(
         status_map_3,
-        REQUIRED_CONDITIONS[0],
+        REQUIRED_001,
         SATISFIED,
     )
 
     assert_status(
         status_map_3,
-        REQUIRED_CONDITIONS[1],
+        REQUIRED_002,
         UNKNOWN,
     )
 

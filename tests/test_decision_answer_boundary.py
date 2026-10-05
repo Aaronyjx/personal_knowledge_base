@@ -150,6 +150,28 @@ from src.legal_rule_registry import get_rule
 
 _CANONICAL_RULE = get_rule(RULE_ID)
 
+
+# ============================================================
+# Stable Condition Identity
+# ============================================================
+
+CONDITION_TEXT_BY_ID = {
+    str(item["condition_id"]).strip(): str(item["condition"]).strip()
+    for item in _CANONICAL_RULE["condition_definitions"]
+}
+
+REQUIRED_001 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-001"]
+REQUIRED_002 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-002"]
+REQUIRED_003 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-003"]
+REQUIRED_004 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-004"]
+
+EXCLUSION_001 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCLUSION-001"]
+EXCLUSION_002 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCLUSION-002"]
+EXCLUSION_003 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCLUSION-003"]
+
+EXCEPTION_001 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCEPTION-001"]
+
+
 REQUIRED_CONDITIONS = list(
     _CANONICAL_RULE["conditions"]
 )
@@ -510,16 +532,16 @@ def conditional_statuses() -> Dict[str, str]:
     """
 
     return {
-        REQUIRED_CONDITIONS[0]: SATISFIED,
-        REQUIRED_CONDITIONS[1]: SATISFIED,
-        REQUIRED_CONDITIONS[2]: UNKNOWN,
-        REQUIRED_CONDITIONS[3]: UNKNOWN,
+        REQUIRED_001: SATISFIED,
+        REQUIRED_002: SATISFIED,
+        REQUIRED_003: UNKNOWN,
+        REQUIRED_004: UNKNOWN,
 
-        EXCLUSION_CONDITIONS[0]: UNKNOWN,
-        EXCLUSION_CONDITIONS[1]: UNKNOWN,
-        EXCLUSION_CONDITIONS[2]: UNKNOWN,
+        EXCLUSION_001: UNKNOWN,
+        EXCLUSION_002: UNKNOWN,
+        EXCLUSION_003: UNKNOWN,
 
-        EXCEPTION_CONDITIONS[0]: UNKNOWN,
+        EXCEPTION_001: UNKNOWN,
     }
 
 
@@ -562,7 +584,7 @@ def not_established_statuses() -> Dict[str, str]:
     # --------------------------------------------------------
 
     statuses[
-        EXCLUSION_CONDITIONS[0]
+        EXCLUSION_001
     ] = SATISFIED
 
     # --------------------------------------------------------
@@ -570,7 +592,7 @@ def not_established_statuses() -> Dict[str, str]:
     # --------------------------------------------------------
 
     statuses[
-        EXCLUSION_CONDITIONS[1]
+        EXCLUSION_002
     ] = NOT_SATISFIED
 
     # --------------------------------------------------------
@@ -578,7 +600,7 @@ def not_established_statuses() -> Dict[str, str]:
     # --------------------------------------------------------
 
     statuses[
-        EXCLUSION_CONDITIONS[2]
+        EXCLUSION_003
     ] = NOT_SATISFIED
 
     # --------------------------------------------------------
@@ -586,7 +608,7 @@ def not_established_statuses() -> Dict[str, str]:
     # --------------------------------------------------------
 
     statuses[
-        EXCEPTION_CONDITIONS[0]
+        EXCEPTION_001
     ] = NOT_SATISFIED
 
     return statuses
@@ -1530,16 +1552,16 @@ def case_11_stable_condition_id_state_fidelity() -> None:
     # ========================================================
 
     statuses = {
-        REQUIRED_CONDITIONS[0]: SATISFIED,
-        REQUIRED_CONDITIONS[1]: SATISFIED,
-        REQUIRED_CONDITIONS[2]: UNKNOWN,
-        REQUIRED_CONDITIONS[3]: UNKNOWN,
+        REQUIRED_001: SATISFIED,
+        REQUIRED_002: SATISFIED,
+        REQUIRED_003: UNKNOWN,
+        REQUIRED_004: UNKNOWN,
 
-        EXCLUSION_CONDITIONS[0]: UNKNOWN,
-        EXCLUSION_CONDITIONS[1]: UNKNOWN,
-        EXCLUSION_CONDITIONS[2]: UNKNOWN,
+        EXCLUSION_001: UNKNOWN,
+        EXCLUSION_002: UNKNOWN,
+        EXCLUSION_003: UNKNOWN,
 
-        EXCEPTION_CONDITIONS[0]: UNKNOWN,
+        EXCEPTION_001: UNKNOWN,
     }
 
     decision = make_decision_result(
