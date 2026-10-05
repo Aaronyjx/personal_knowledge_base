@@ -132,6 +132,185 @@ EXCEPTION_CONDITIONS = [
 
 
 # ============================================================
+# Article 14 Stable Condition Identity
+# ============================================================
+#
+# V6.2 新增：
+#
+# condition_id 是机器稳定身份。
+#
+# 重要原则：
+#
+# 1. condition_id 不替代原有 condition 文本
+# 2. REQUIRED_CONDITIONS 等 List[str] 保持 V6.1 兼容
+# 3. condition_id 不依赖列表位置
+# 4. 下游模块暂时不需要修改
+# 5. 本层仍然是唯一 Canonical Source
+#
+# 后续 V6.2 将逐步把 condition_id 传播到：
+#
+#     ConditionResult
+#          ↓
+#     DecisionResult
+#          ↓
+#     Answer Builder / Validator
+#
+# ============================================================
+
+REQUIRED_CONDITION_IDS = [
+    "ARTICLE-14-REQUIRED-001",
+    "ARTICLE-14-REQUIRED-002",
+    "ARTICLE-14-REQUIRED-003",
+    "ARTICLE-14-REQUIRED-004",
+]
+
+EXCLUSION_CONDITION_IDS = [
+    "ARTICLE-14-EXCLUSION-001",
+    "ARTICLE-14-EXCLUSION-002",
+    "ARTICLE-14-EXCLUSION-003",
+]
+
+EXCEPTION_CONDITION_IDS = [
+    "ARTICLE-14-EXCEPTION-001",
+]
+
+
+# ============================================================
+# Canonical Condition Definitions
+# ============================================================
+#
+# 注意：
+#
+# condition 文本仍然来自上面的 Canonical Condition Lists。
+#
+# 这里增加的是稳定机器身份，而不是第二套法律条件文本。
+#
+# ============================================================
+
+def build_article_14_condition_definitions() -> list[Dict[str, str]]:
+    """
+    构建 Article 14 的 Stable Condition Identity Metadata。
+
+    本函数只建立：
+        condition_id
+        condition
+        condition_type
+
+    不执行法律推理。
+    """
+
+    definitions = []
+
+    for condition_id, condition in zip(
+        REQUIRED_CONDITION_IDS,
+        REQUIRED_CONDITIONS,
+    ):
+        definitions.append(
+            {
+                "condition_id": condition_id,
+                "condition": condition,
+                "condition_type": "REQUIRED",
+            }
+        )
+
+    for condition_id, condition in zip(
+        EXCLUSION_CONDITION_IDS,
+        EXCLUSION_CONDITIONS,
+    ):
+        definitions.append(
+            {
+                "condition_id": condition_id,
+                "condition": condition,
+                "condition_type": "EXCLUSION",
+            }
+        )
+
+    for condition_id, condition in zip(
+        EXCEPTION_CONDITION_IDS,
+        EXCEPTION_CONDITIONS,
+    ):
+        definitions.append(
+            {
+                "condition_id": condition_id,
+                "condition": condition,
+                "condition_type": "EXCEPTION",
+            }
+        )
+
+    return definitions
+
+
+# ============================================================
+# Stable Condition Identity Validation
+# ============================================================
+
+def validate_article_14_condition_identity() -> Dict[str, Any]:
+    """
+    验证 Article 14 Stable Condition Identity 的完整性。
+
+    本函数只验证：
+        condition_id
+        condition
+        condition_type
+
+    三者之间的一致性。
+
+    不执行法律推理。
+    """
+
+    definitions = build_article_14_condition_definitions()
+
+    expected_conditions = (
+        [
+            (condition_id, condition, "REQUIRED")
+            for condition_id, condition in zip(
+                REQUIRED_CONDITION_IDS,
+                REQUIRED_CONDITIONS,
+            )
+        ]
+        + [
+            (condition_id, condition, "EXCLUSION")
+            for condition_id, condition in zip(
+                EXCLUSION_CONDITION_IDS,
+                EXCLUSION_CONDITIONS,
+            )
+        ]
+        + [
+            (condition_id, condition, "EXCEPTION")
+            for condition_id, condition in zip(
+                EXCEPTION_CONDITION_IDS,
+                EXCEPTION_CONDITIONS,
+            )
+        ]
+    )
+
+    actual_conditions = [
+        (
+            item["condition_id"],
+            item["condition"],
+            item["condition_type"],
+        )
+        for item in definitions
+    ]
+
+    ids = [
+        item["condition_id"]
+        for item in definitions
+    ]
+
+    return {
+        "valid": (
+            actual_conditions == expected_conditions
+            and len(definitions) == 8
+            and len(set(ids)) == 8
+        ),
+        "definition_count": len(definitions),
+        "unique_id_count": len(set(ids)),
+        "expected_count": len(expected_conditions),
+    }
+
+
+# ============================================================
 # All Article 14 Conditions
 # ============================================================
 
@@ -207,6 +386,14 @@ def build_article_14_definition() -> Dict[str, Any]:
 
         "exceptions": list(
             EXCEPTION_CONDITIONS
+        ),
+
+        # V6.2 Stable Condition Identity。
+        #
+        # 保留上面的三个 List[str] 字段，
+        # 供 V6.1 下游模块继续使用。
+        "condition_definitions": (
+            build_article_14_condition_definitions()
         ),
 
         "legal_obligations": list(

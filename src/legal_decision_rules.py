@@ -122,5 +122,10 @@ def build_core_rule() -> Dict[str, Any]:
             canonical_rule["exceptions"]
         ),
 
+        "condition_definitions": [
+            dict(item)
+            for item in canonical_rule["condition_definitions"]
+        ],
+
         "priority": "ARTICLE_14",
     }

@@ -328,7 +328,39 @@ ALL_CONDITIONS = (
 class ConditionResult:
     """
     单项法律条件判断结果。
+
+    V6.2：
+
+        condition_id：
+            稳定的机器条件身份。
+
+            用于：
+                - 条件唯一识别
+                - 条件级数据流追踪
+                - 防止依赖位置判断
+                - 后续 ConditionResult 跨模块传递
+
+        condition：
+            法律条件原文。
+
+            用于：
+                - 法律语义展示
+                - 兼容 V6.1 既有调用
+                - Answer Builder / Validator 等旧接口
+
+        condition_type：
+            REQUIRED / EXCLUSION / EXCEPTION
+
+    重要原则：
+
+        condition_id 是机器身份。
+        condition 是法律文本。
+        condition_type 是法律条件类别。
+
+        三者职责不同，不互相替代。
     """
+
+    condition_id: str
 
     condition: str
 
@@ -349,9 +381,18 @@ class ConditionResult:
     def to_dict(self) -> Dict[str, Any]:
         """
         转换为字典。
+
+        V6.2：
+
+            condition_id 必须随 ConditionResult
+            一起向下游传播。
+
+        同时保留 V6.1 原有字段，
+        避免破坏现有消费者。
         """
 
         return {
+            "condition_id": self.condition_id,
             "condition": self.condition,
             "status": self.status,
             "reason": self.reason,
@@ -768,6 +809,7 @@ def build_rule_dependency(
 
 def match_condition(
     facts: LegalFacts,
+    condition_id: str,
     condition: str,
     condition_type: str,
 ) -> ConditionResult:
@@ -803,10 +845,52 @@ def match_condition(
     """
 
     # ========================================================
+    # V6.2 Stable Condition Identity
+    # ========================================================
+    #
+    # 所有法律条件判断继续使用原有事实判断逻辑。
+    #
+    # ConditionResult 的构造统一经过这里，
+    # 由上游传入的 condition_id 作为稳定机器身份。
+    #
+    # 不在这里根据条件位置生成 condition_id。
+    # ========================================================
+
+    def build_condition_result(
+        condition: str,
+        status: str,
+        reason: str,
+        condition_type: str,
+    ) -> ConditionResult:
+        """
+        统一构造 V6.2 ConditionResult。
+
+        condition_id：
+            来自 evaluate_rule() 传入的稳定条件身份。
+
+        condition：
+            当前法律条件原文。
+
+        condition_type：
+            当前法律条件类别。
+
+        status / reason：
+            继续使用原有法律事实判断结果。
+        """
+
+        return ConditionResult(
+            condition_id=condition_id,
+            condition=condition,
+            status=status,
+            reason=reason,
+            condition_type=condition_type,
+        )
+
+    # ========================================================
     # REQUIRED 1
     # ========================================================
 
-    if condition == REQUIRED_CONDITIONS[0]:
+    if condition_id == "ARTICLE-14-REQUIRED-001":
 
         contract_sequence = (
             facts.contract_sequence
@@ -819,7 +903,7 @@ def match_condition(
             and contract_sequence.continuous
         ):
 
-            return ConditionResult(
+            return build_condition_result(
                 condition=condition,
                 status=SATISFIED,
                 reason=(
@@ -829,7 +913,7 @@ def match_condition(
                 condition_type=REQUIRED,
             )
 
-        return ConditionResult(
+        return build_condition_result(
             condition=condition,
             status=UNKNOWN,
             reason=(
@@ -843,7 +927,7 @@ def match_condition(
     # REQUIRED 2
     # ========================================================
 
-    if condition == REQUIRED_CONDITIONS[1]:
+    if condition_id == "ARTICLE-14-REQUIRED-002":
 
         contract_sequence = (
             facts.contract_sequence
@@ -855,7 +939,7 @@ def match_condition(
             and contract_sequence.term_type == "fixed"
         ):
 
-            return ConditionResult(
+            return build_condition_result(
                 condition=condition,
                 status=SATISFIED,
                 reason=(
@@ -868,7 +952,7 @@ def match_condition(
 
         if facts.completed_renewal is True:
 
-            return ConditionResult(
+            return build_condition_result(
                 condition=condition,
                 status=SATISFIED,
                 reason=(
@@ -878,7 +962,7 @@ def match_condition(
                 condition_type=REQUIRED,
             )
 
-        return ConditionResult(
+        return build_condition_result(
             condition=condition,
             status=UNKNOWN,
             reason=(
@@ -892,11 +976,11 @@ def match_condition(
     # REQUIRED 3
     # ========================================================
 
-    if condition == REQUIRED_CONDITIONS[2]:
+    if condition_id == "ARTICLE-14-REQUIRED-003":
 
         if facts.completed_renewal is True:
 
-            return ConditionResult(
+            return build_condition_result(
                 condition=condition,
                 status=SATISFIED,
                 reason=(
@@ -916,7 +1000,7 @@ def match_condition(
             and contract_sequence.count >= 3
         ):
 
-            return ConditionResult(
+            return build_condition_result(
                 condition=condition,
                 status=UNKNOWN,
                 reason=(
@@ -927,7 +1011,7 @@ def match_condition(
                 condition_type=REQUIRED,
             )
 
-        return ConditionResult(
+        return build_condition_result(
             condition=condition,
             status=UNKNOWN,
             reason=(
@@ -941,11 +1025,11 @@ def match_condition(
     # REQUIRED 4
     # ========================================================
 
-    if condition == REQUIRED_CONDITIONS[3]:
+    if condition_id == "ARTICLE-14-REQUIRED-004":
 
         if facts.worker_agreement is True:
 
-            return ConditionResult(
+            return build_condition_result(
                 condition=condition,
                 status=SATISFIED,
                 reason=(
@@ -964,7 +1048,7 @@ def match_condition(
             and contract_sequence.count >= 2
         ):
 
-            return ConditionResult(
+            return build_condition_result(
                 condition=condition,
                 status=UNKNOWN,
                 reason=(
@@ -975,7 +1059,7 @@ def match_condition(
                 condition_type=REQUIRED,
             )
 
-        return ConditionResult(
+        return build_condition_result(
             condition=condition,
             status=UNKNOWN,
             reason=(
@@ -990,7 +1074,7 @@ def match_condition(
     # Article 39
     # ========================================================
 
-    if condition == EXCLUSION_CONDITIONS[0]:
+    if condition_id == "ARTICLE-14-EXCLUSION-001":
 
         # ----------------------------------------------------
         # True：
@@ -1006,7 +1090,7 @@ def match_condition(
 
         if facts.article_39 is True:
 
-            return ConditionResult(
+            return build_condition_result(
                 condition=condition,
                 status=SATISFIED,
                 reason=(
@@ -1031,7 +1115,7 @@ def match_condition(
 
         if facts.article_39 is False:
 
-            return ConditionResult(
+            return build_condition_result(
                 condition=condition,
                 status=NOT_SATISFIED,
                 reason=(
@@ -1050,7 +1134,7 @@ def match_condition(
         # 不得推测。
         # ----------------------------------------------------
 
-        return ConditionResult(
+        return build_condition_result(
             condition=condition,
             status=UNKNOWN,
             reason=(
@@ -1065,7 +1149,7 @@ def match_condition(
     # Article 40(1)
     # ========================================================
 
-    if condition == EXCLUSION_CONDITIONS[1]:
+    if condition_id == "ARTICLE-14-EXCLUSION-002":
 
         # ----------------------------------------------------
         # True：
@@ -1079,7 +1163,7 @@ def match_condition(
 
         if facts.article_40_1 is True:
 
-            return ConditionResult(
+            return build_condition_result(
                 condition=condition,
                 status=SATISFIED,
                 reason=(
@@ -1101,7 +1185,7 @@ def match_condition(
 
         if facts.article_40_1 is False:
 
-            return ConditionResult(
+            return build_condition_result(
                 condition=condition,
                 status=NOT_SATISFIED,
                 reason=(
@@ -1112,7 +1196,7 @@ def match_condition(
                 condition_type=EXCLUSION,
             )
 
-        return ConditionResult(
+        return build_condition_result(
             condition=condition,
             status=UNKNOWN,
             reason=(
@@ -1127,7 +1211,7 @@ def match_condition(
     # Article 40(2)
     # ========================================================
 
-    if condition == EXCLUSION_CONDITIONS[2]:
+    if condition_id == "ARTICLE-14-EXCLUSION-003":
 
         # ----------------------------------------------------
         # True：
@@ -1141,7 +1225,7 @@ def match_condition(
 
         if facts.article_40_2 is True:
 
-            return ConditionResult(
+            return build_condition_result(
                 condition=condition,
                 status=SATISFIED,
                 reason=(
@@ -1163,7 +1247,7 @@ def match_condition(
 
         if facts.article_40_2 is False:
 
-            return ConditionResult(
+            return build_condition_result(
                 condition=condition,
                 status=NOT_SATISFIED,
                 reason=(
@@ -1174,7 +1258,7 @@ def match_condition(
                 condition_type=EXCLUSION,
             )
 
-        return ConditionResult(
+        return build_condition_result(
             condition=condition,
             status=UNKNOWN,
             reason=(
@@ -1188,7 +1272,7 @@ def match_condition(
     # EXCEPTION
     # ========================================================
 
-    if condition == EXCEPTION_CONDITIONS[0]:
+    if condition_id == "ARTICLE-14-EXCEPTION-001":
 
         # ----------------------------------------------------
         # True：
@@ -1202,7 +1286,7 @@ def match_condition(
 
         if facts.fixed_term_exception is True:
 
-            return ConditionResult(
+            return build_condition_result(
                 condition=condition,
                 status=SATISFIED,
                 reason=(
@@ -1224,7 +1308,7 @@ def match_condition(
 
         if facts.fixed_term_exception is False:
 
-            return ConditionResult(
+            return build_condition_result(
                 condition=condition,
                 status=NOT_SATISFIED,
                 reason=(
@@ -1241,7 +1325,7 @@ def match_condition(
         # 用户没有明确说明。
         # ----------------------------------------------------
 
-        return ConditionResult(
+        return build_condition_result(
             condition=condition,
             status=UNKNOWN,
             reason=(
@@ -1255,7 +1339,7 @@ def match_condition(
     # Default
     # ========================================================
 
-    return ConditionResult(
+    return build_condition_result(
         condition=condition,
         status=UNKNOWN,
         reason="当前条件没有匹配到明确事实。",
@@ -1329,6 +1413,141 @@ def validate_condition_structure(
             f"实际为 {len(exception_results)}。"
         )
 
+    # --------------------------------------------------------
+    # V6.2 Stable Condition Identity Validation
+    # --------------------------------------------------------
+    #
+    # condition_id 是机器身份。
+    #
+    # Validator 不重新硬编码 ARTICLE-14-* ID，
+    # 而是从 Canonical Rule 派生预期身份。
+    #
+    # 因此身份来源保持唯一：
+    #
+    #     Canonical Definition
+    #             ↓
+    #     Runtime Rule
+    #             ↓
+    #     ConditionResult
+    #             ↓
+    #     Validator
+    # --------------------------------------------------------
+
+    canonical_condition_definitions = (
+        _CANONICAL_RULE.get(
+            "condition_definitions",
+            [],
+        )
+    )
+
+    if not isinstance(
+        canonical_condition_definitions,
+        list,
+    ):
+        raise ValueError(
+            "Canonical Rule 的 condition_definitions "
+            "必须是 list。"
+        )
+
+    if len(canonical_condition_definitions) != 8:
+        raise ValueError(
+            "Canonical Rule 的 condition_definitions "
+            "必须为 8 个，"
+            f"实际为 {len(canonical_condition_definitions)}。"
+        )
+
+    expected_condition_ids = [
+        str(item.get("condition_id", "")).strip()
+        for item in canonical_condition_definitions
+    ]
+
+    if any(
+        not condition_id
+        for condition_id in expected_condition_ids
+    ):
+        raise ValueError(
+            "Canonical Rule 的 condition_definitions "
+            "存在空 condition_id。"
+        )
+
+    if len(set(expected_condition_ids)) != 8:
+        raise ValueError(
+            "Canonical Rule 的 condition_definitions "
+            "存在重复 condition_id。"
+        )
+
+    actual_condition_ids = [
+        str(item.condition_id).strip()
+        for item in condition_results
+    ]
+
+    if any(
+        not condition_id
+        for condition_id in actual_condition_ids
+    ):
+        raise ValueError(
+            "ConditionResult 存在空 condition_id。"
+        )
+
+    if len(set(actual_condition_ids)) != 8:
+        raise ValueError(
+            "ConditionResult 存在重复 condition_id。"
+        )
+
+    if actual_condition_ids != expected_condition_ids:
+        raise ValueError(
+            "ConditionResult 的 condition_id 顺序或集合"
+            "与 Canonical Rule 不一致。"
+        )
+
+    expected_by_id = {
+        str(item.get("condition_id", "")).strip(): (
+            str(item.get("condition", "")).strip(),
+            str(item.get("condition_type", "")).strip(),
+        )
+        for item in canonical_condition_definitions
+    }
+
+    for item in condition_results:
+
+        condition_id = str(
+            item.condition_id
+        ).strip()
+
+        expected_condition, expected_type = (
+            expected_by_id[condition_id]
+        )
+
+        actual_condition = str(
+            item.condition
+        ).strip()
+
+        actual_type = str(
+            item.condition_type
+        ).strip()
+
+        if actual_condition != expected_condition:
+            raise ValueError(
+                "ConditionResult 的 condition_id 与 "
+                "condition 文本不匹配："
+                f"{condition_id}"
+            )
+
+        if actual_type != expected_type:
+            raise ValueError(
+                "ConditionResult 的 condition_id 与 "
+                "condition_type 不匹配："
+                f"{condition_id}"
+            )
+
+    # --------------------------------------------------------
+    # V6.1 Compatibility Validation
+    # --------------------------------------------------------
+    #
+    # 保留原有 condition 文本验证，
+    # 确保 V6.2 Stable Identity 不破坏旧消费者。
+    # --------------------------------------------------------
+
     names = [
         item.condition
         for item in condition_results
@@ -1398,64 +1617,118 @@ def evaluate_rule(
     ] = []
 
     # --------------------------------------------------------
-    # REQUIRED
+    # V6.2 Stable Condition Identity
     # --------------------------------------------------------
     #
-    # Canonical Rule 已由调用方通过 Rule Registry
-    # → build_core_rule()
-    # → select_core_rule()
-    # 传入此处。
+    # Runtime Rule 已经由：
     #
-    # evaluate_rule() 不再直接依赖独立条件常量。
+    #     Canonical Definition
+    #         ↓
+    #     Rule Registry
+    #         ↓
+    #     Runtime Rule
+    #
+    # 提供 condition_definitions。
+    #
+    # 每个 definition 同时包含：
+    #
+    #     condition_id
+    #     condition
+    #     condition_type
+    #
+    # 因此 evaluate_rule() 不再通过：
+    #
+    #     REQUIRED_CONDITIONS[0]
+    #     REQUIRED_CONDITIONS[1]
+    #     ...
+    #
+    # 推导条件身份。
+    #
+    # evaluate_rule() 不负责定义或生成 Stable Condition ID。
+    #
+    # Stable Condition ID 由 Runtime Rule 提供。
+    #
+    # match_condition() 仅将 Stable Condition ID
+    # 作为已有法律事实判断分支的 dispatch key。
     # --------------------------------------------------------
 
-    for condition in rule.get(
-        "conditions",
+    condition_definitions = rule.get(
+        "condition_definitions",
         [],
+    )
+
+    if not isinstance(
+        condition_definitions,
+        list,
     ):
+        raise ValueError(
+            "Runtime Rule 的 condition_definitions "
+            "必须是 list。"
+        )
+
+    if not condition_definitions:
+        raise ValueError(
+            "Runtime Rule 缺少 condition_definitions，"
+            "无法执行 V6.2 Stable Condition Identity。"
+        )
+
+    for definition in condition_definitions:
+
+        if not isinstance(
+            definition,
+            dict,
+        ):
+            raise ValueError(
+                "condition_definitions 中的每一项 "
+                "必须是 dict。"
+            )
+
+        condition_id = str(
+            definition.get(
+                "condition_id",
+                "",
+            )
+        ).strip()
+
+        condition = str(
+            definition.get(
+                "condition",
+                "",
+            )
+        ).strip()
+
+        condition_type = str(
+            definition.get(
+                "condition_type",
+                "",
+            )
+        ).strip()
+
+        if not condition_id:
+            raise ValueError(
+                "condition_definitions 中存在空 condition_id。"
+            )
+
+        if not condition:
+            raise ValueError(
+                "condition_definitions 中存在空 condition。"
+            )
+
+        if condition_type not in {
+            REQUIRED,
+            EXCLUSION,
+            EXCEPTION,
+        }:
+            raise ValueError(
+                "condition_definitions 中存在非法 "
+                f"condition_type: {condition_type}"
+            )
 
         result = match_condition(
             facts=facts,
+            condition_id=condition_id,
             condition=condition,
-            condition_type=REQUIRED,
-        )
-
-        condition_results.append(
-            result
-        )
-
-    # --------------------------------------------------------
-    # EXCLUSION
-    # --------------------------------------------------------
-
-    for condition in rule.get(
-        "exclusion_conditions",
-        [],
-    ):
-
-        result = match_condition(
-            facts=facts,
-            condition=condition,
-            condition_type=EXCLUSION,
-        )
-
-        condition_results.append(
-            result
-        )
-
-    # --------------------------------------------------------
-    # EXCEPTION
-    # --------------------------------------------------------
-
-    for condition in rule.get(
-        "exceptions",
-        [],
-    ):
-
-        result = match_condition(
-            facts=facts,
-            condition=condition,
-            condition_type=EXCEPTION,
+            condition_type=condition_type,
         )
 
         condition_results.append(

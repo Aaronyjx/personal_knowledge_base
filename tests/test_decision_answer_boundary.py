@@ -241,7 +241,25 @@ def make_condition(
     ConditionResult 本身就是本测试的上游契约。
     """
 
+    condition_id = next(
+        (
+            str(item.get("condition_id", "")).strip()
+            for item in _CANONICAL_RULE.get(
+                "condition_definitions",
+                [],
+            )
+            if str(item.get("condition", "")).strip() == condition
+        ),
+        None,
+    )
+
+    if not condition_id:
+        raise AssertionError(
+            f"Canonical Rule 中未找到条件对应的 condition_id：{condition}"
+        )
+
     return ConditionResult(
+        condition_id=condition_id,
         condition=condition,
         status=status,
         reason=reason,

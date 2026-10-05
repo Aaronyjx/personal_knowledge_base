@@ -335,6 +335,7 @@ class ConditionView:
     Builder 不在这里产生法律判断。
     """
 
+    condition_id: str
     condition: str
     status: str
     reason: str = ""
@@ -354,6 +355,7 @@ class ConditionView:
         """
 
         return {
+            "condition_id": self.condition_id,
             "condition": self.condition,
             "status": self.status,
             "reason": self.reason,
@@ -590,6 +592,20 @@ def _condition_to_view(
     Builder 只做展示层适配。
     """
 
+    condition_id = safe_text(
+        get_value(
+            condition_result,
+            "condition_id",
+            "",
+        )
+    )
+
+    if not condition_id:
+        raise ValueError(
+            "ConditionResult 缺少 condition_id，"
+            "无法构造 V6.2 ConditionView。"
+        )
+
     condition = safe_text(
         get_value(
             condition_result,
@@ -632,6 +648,7 @@ def _condition_to_view(
         )
 
     return ConditionView(
+        condition_id=condition_id,
         condition=condition,
         status=status,
         reason=reason,

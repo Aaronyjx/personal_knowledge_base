@@ -120,11 +120,27 @@ def assert_condition_status(
     检查指定法律条件的状态。
     """
 
+    condition_id = next(
+        (
+            str(item.get("condition_id", "")).strip()
+            for item in _CANONICAL_RULE.get(
+                "condition_definitions",
+                [],
+            )
+            if str(item.get("condition", "")).strip() == condition
+        ),
+        None,
+    )
+
+    assert condition_id is not None, (
+        f"Canonical Rule 中未找到条件：{condition}"
+    )
+
     result = next(
         (
             item
             for item in decision.condition_results
-            if item.condition == condition
+            if item.condition_id == condition_id
         ),
         None,
     )
