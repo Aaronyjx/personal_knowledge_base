@@ -95,17 +95,21 @@ from src.legal_rule_registry import (
 
 _CANONICAL_RULE = get_rule(RULE_ID)
 
-REQUIRED_CONDITIONS = list(
-    _CANONICAL_RULE["conditions"]
-)
+CONDITION_TEXT_BY_ID = {
+    str(item["condition_id"]).strip(): str(item["condition"]).strip()
+    for item in _CANONICAL_RULE["condition_definitions"]
+}
 
-EXCLUSION_CONDITIONS = list(
-    _CANONICAL_RULE["exclusion_conditions"]
-)
+REQUIRED_001 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-001"]
+REQUIRED_002 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-002"]
+REQUIRED_003 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-003"]
+REQUIRED_004 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-004"]
 
-EXCEPTION_CONDITIONS = list(
-    _CANONICAL_RULE["exceptions"]
-)
+EXCLUSION_001 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCLUSION-001"]
+EXCLUSION_002 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCLUSION-002"]
+EXCLUSION_003 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCLUSION-003"]
+
+EXCEPTION_001 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCEPTION-001"]
 
 
 ENGINE_VERSION = "V6.0-14"
@@ -299,7 +303,7 @@ def run_component_test() -> None:
 
     assert_condition_status(
         decision,
-        REQUIRED_CONDITIONS[0],
+        REQUIRED_001,
         SATISFIED,
     )
 
@@ -309,7 +313,7 @@ def run_component_test() -> None:
 
     assert_condition_status(
         decision,
-        REQUIRED_CONDITIONS[1],
+        REQUIRED_002,
         SATISFIED,
     )
 
@@ -319,7 +323,7 @@ def run_component_test() -> None:
 
     assert_condition_status(
         decision,
-        REQUIRED_CONDITIONS[2],
+        REQUIRED_003,
         UNKNOWN,
     )
 
@@ -329,7 +333,7 @@ def run_component_test() -> None:
 
     assert_condition_status(
         decision,
-        REQUIRED_CONDITIONS[3],
+        REQUIRED_004,
         UNKNOWN,
     )
 
@@ -339,19 +343,19 @@ def run_component_test() -> None:
 
     assert_condition_status(
         decision,
-        EXCLUSION_CONDITIONS[0],
+        EXCLUSION_001,
         UNKNOWN,
     )
 
     assert_condition_status(
         decision,
-        EXCLUSION_CONDITIONS[1],
+        EXCLUSION_002,
         UNKNOWN,
     )
 
     assert_condition_status(
         decision,
-        EXCLUSION_CONDITIONS[2],
+        EXCLUSION_003,
         UNKNOWN,
     )
 
@@ -361,7 +365,7 @@ def run_component_test() -> None:
 
     assert_condition_status(
         decision,
-        EXCEPTION_CONDITIONS[0],
+        EXCEPTION_001,
         UNKNOWN,
     )
 
@@ -372,8 +376,8 @@ def run_component_test() -> None:
     assert set(
         decision.satisfied_conditions
     ) == {
-        REQUIRED_CONDITIONS[0],
-        REQUIRED_CONDITIONS[1],
+        REQUIRED_001,
+        REQUIRED_002,
     }
 
     # --------------------------------------------------------
@@ -383,12 +387,12 @@ def run_component_test() -> None:
     assert set(
         decision.unknown_conditions
     ) == {
-        REQUIRED_CONDITIONS[2],
-        REQUIRED_CONDITIONS[3],
-        EXCLUSION_CONDITIONS[0],
-        EXCLUSION_CONDITIONS[1],
-        EXCLUSION_CONDITIONS[2],
-        EXCEPTION_CONDITIONS[0],
+        REQUIRED_003,
+        REQUIRED_004,
+        EXCLUSION_001,
+        EXCLUSION_002,
+        EXCLUSION_003,
+        EXCEPTION_001,
     }
 
     assert (
@@ -511,25 +515,25 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_2,
-        REQUIRED_CONDITIONS[0],
+        REQUIRED_001,
         SATISFIED,
     )
 
     assert_condition_status(
         result_2,
-        REQUIRED_CONDITIONS[1],
+        REQUIRED_002,
         SATISFIED,
     )
 
     assert_condition_status(
         result_2,
-        REQUIRED_CONDITIONS[2],
+        REQUIRED_003,
         SATISFIED,
     )
 
     assert_condition_status(
         result_2,
-        REQUIRED_CONDITIONS[3],
+        REQUIRED_004,
         SATISFIED,
     )
 
@@ -539,7 +543,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_2,
-        EXCEPTION_CONDITIONS[0],
+        EXCEPTION_001,
         NOT_SATISFIED,
     )
 
@@ -560,7 +564,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_3,
-        EXCLUSION_CONDITIONS[0],
+        EXCLUSION_001,
         SATISFIED,
     )
 
@@ -570,7 +574,7 @@ def run_additional_tests() -> None:
     )
 
     assert (
-        EXCLUSION_CONDITIONS[0]
+        EXCLUSION_001
         in result_3.triggered_exclusion_conditions
     )
 
@@ -590,7 +594,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_4,
-        EXCLUSION_CONDITIONS[0],
+        EXCLUSION_001,
         NOT_SATISFIED,
     )
 
@@ -610,7 +614,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_5,
-        EXCLUSION_CONDITIONS[1],
+        EXCLUSION_002,
         NOT_SATISFIED,
     )
 
@@ -630,7 +634,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_6,
-        EXCLUSION_CONDITIONS[2],
+        EXCLUSION_003,
         NOT_SATISFIED,
     )
 
@@ -650,7 +654,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_7,
-        EXCEPTION_CONDITIONS[0],
+        EXCEPTION_001,
         NOT_SATISFIED,
     )
 
@@ -670,13 +674,13 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_8,
-        REQUIRED_CONDITIONS[2],
+        REQUIRED_003,
         UNKNOWN,
     )
 
     assert_condition_status(
         result_8,
-        REQUIRED_CONDITIONS[1],
+        REQUIRED_002,
         UNKNOWN,
     )
 
@@ -696,19 +700,19 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_9,
-        REQUIRED_CONDITIONS[3],
+        REQUIRED_004,
         SATISFIED,
     )
 
     assert_condition_status(
         result_9,
-        REQUIRED_CONDITIONS[2],
+        REQUIRED_003,
         UNKNOWN,
     )
 
     assert_condition_status(
         result_9,
-        REQUIRED_CONDITIONS[1],
+        REQUIRED_002,
         UNKNOWN,
     )
 
@@ -730,25 +734,25 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_10,
-        REQUIRED_CONDITIONS[1],
+        REQUIRED_002,
         SATISFIED,
     )
 
     assert_condition_status(
         result_10,
-        REQUIRED_CONDITIONS[2],
+        REQUIRED_003,
         SATISFIED,
     )
 
     assert_condition_status(
         result_10,
-        REQUIRED_CONDITIONS[3],
+        REQUIRED_004,
         SATISFIED,
     )
 
     assert_condition_status(
         result_10,
-        EXCEPTION_CONDITIONS[0],
+        EXCEPTION_001,
         NOT_SATISFIED,
     )
 
@@ -814,7 +818,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_11,
-        REQUIRED_CONDITIONS[0],
+        REQUIRED_001,
         SATISFIED,
     )
 
@@ -824,7 +828,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_11,
-        REQUIRED_CONDITIONS[1],
+        REQUIRED_002,
         SATISFIED,
     )
 
@@ -834,7 +838,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_11,
-        REQUIRED_CONDITIONS[2],
+        REQUIRED_003,
         SATISFIED,
     )
 
@@ -844,7 +848,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_11,
-        REQUIRED_CONDITIONS[3],
+        REQUIRED_004,
         SATISFIED,
     )
 
@@ -854,7 +858,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_11,
-        EXCLUSION_CONDITIONS[0],
+        EXCLUSION_001,
         NOT_SATISFIED,
     )
 
@@ -864,7 +868,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_11,
-        EXCLUSION_CONDITIONS[1],
+        EXCLUSION_002,
         NOT_SATISFIED,
     )
 
@@ -874,7 +878,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_11,
-        EXCLUSION_CONDITIONS[2],
+        EXCLUSION_003,
         NOT_SATISFIED,
     )
 
@@ -884,7 +888,7 @@ def run_additional_tests() -> None:
 
     assert_condition_status(
         result_11,
-        EXCEPTION_CONDITIONS[0],
+        EXCEPTION_001,
         NOT_SATISFIED,
     )
 
@@ -1296,28 +1300,28 @@ def run_regression_tests() -> None:
             ),
             "decision": CONDITIONAL,
             "statuses": {
-                REQUIRED_CONDITIONS[0]:
+                REQUIRED_001:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[1]:
+                REQUIRED_002:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[2]:
+                REQUIRED_003:
                     UNKNOWN,
 
-                REQUIRED_CONDITIONS[3]:
+                REQUIRED_004:
                     UNKNOWN,
 
-                EXCLUSION_CONDITIONS[0]:
+                EXCLUSION_001:
                     UNKNOWN,
 
-                EXCLUSION_CONDITIONS[1]:
+                EXCLUSION_002:
                     UNKNOWN,
 
-                EXCLUSION_CONDITIONS[2]:
+                EXCLUSION_003:
                     UNKNOWN,
 
-                EXCEPTION_CONDITIONS[0]:
+                EXCEPTION_001:
                     UNKNOWN,
             },
         },
@@ -1332,19 +1336,19 @@ def run_regression_tests() -> None:
             ),
             "decision": CONDITIONAL,
             "statuses": {
-                REQUIRED_CONDITIONS[0]:
+                REQUIRED_001:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[1]:
+                REQUIRED_002:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[2]:
+                REQUIRED_003:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[3]:
+                REQUIRED_004:
                     SATISFIED,
 
-                EXCEPTION_CONDITIONS[0]:
+                EXCEPTION_001:
                     NOT_SATISFIED,
             },
         },
@@ -1357,16 +1361,16 @@ def run_regression_tests() -> None:
             ),
             "decision": CONDITIONAL,
             "statuses": {
-                REQUIRED_CONDITIONS[0]:
+                REQUIRED_001:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[1]:
+                REQUIRED_002:
                     UNKNOWN,
 
-                REQUIRED_CONDITIONS[2]:
+                REQUIRED_003:
                     UNKNOWN,
 
-                REQUIRED_CONDITIONS[3]:
+                REQUIRED_004:
                     UNKNOWN,
             },
         },
@@ -1379,13 +1383,13 @@ def run_regression_tests() -> None:
             ),
             "decision": NOT_ESTABLISHED,
             "statuses": {
-                REQUIRED_CONDITIONS[0]:
+                REQUIRED_001:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[1]:
+                REQUIRED_002:
                     SATISFIED,
 
-                EXCLUSION_CONDITIONS[0]:
+                EXCLUSION_001:
                     SATISFIED,
             },
         },
@@ -1398,16 +1402,16 @@ def run_regression_tests() -> None:
             ),
             "decision": CONDITIONAL,
             "statuses": {
-                REQUIRED_CONDITIONS[0]:
+                REQUIRED_001:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[1]:
+                REQUIRED_002:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[2]:
+                REQUIRED_003:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[3]:
+                REQUIRED_004:
                     UNKNOWN,
             },
         },
@@ -1420,13 +1424,13 @@ def run_regression_tests() -> None:
             ),
             "decision": CONDITIONAL,
             "statuses": {
-                REQUIRED_CONDITIONS[0]:
+                REQUIRED_001:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[1]:
+                REQUIRED_002:
                     UNKNOWN,
 
-                REQUIRED_CONDITIONS[2]:
+                REQUIRED_003:
                     UNKNOWN,
             },
         },
@@ -1439,13 +1443,13 @@ def run_regression_tests() -> None:
             ),
             "decision": CONDITIONAL,
             "statuses": {
-                REQUIRED_CONDITIONS[0]:
+                REQUIRED_001:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[1]:
+                REQUIRED_002:
                     UNKNOWN,
 
-                REQUIRED_CONDITIONS[2]:
+                REQUIRED_003:
                     UNKNOWN,
             },
         },
@@ -1458,16 +1462,16 @@ def run_regression_tests() -> None:
             ),
             "decision": CONDITIONAL,
             "statuses": {
-                REQUIRED_CONDITIONS[0]:
+                REQUIRED_001:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[1]:
+                REQUIRED_002:
                     UNKNOWN,
 
-                REQUIRED_CONDITIONS[2]:
+                REQUIRED_003:
                     UNKNOWN,
 
-                REQUIRED_CONDITIONS[3]:
+                REQUIRED_004:
                     SATISFIED,
             },
         },
@@ -1481,16 +1485,16 @@ def run_regression_tests() -> None:
             ),
             "decision": CONDITIONAL,
             "statuses": {
-                REQUIRED_CONDITIONS[0]:
+                REQUIRED_001:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[1]:
+                REQUIRED_002:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[2]:
+                REQUIRED_003:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[3]:
+                REQUIRED_004:
                     UNKNOWN,
             },
         },
@@ -1505,19 +1509,19 @@ def run_regression_tests() -> None:
             ),
             "decision": NOT_ESTABLISHED,
             "statuses": {
-                REQUIRED_CONDITIONS[0]:
+                REQUIRED_001:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[1]:
+                REQUIRED_002:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[2]:
+                REQUIRED_003:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[3]:
+                REQUIRED_004:
                     SATISFIED,
 
-                EXCEPTION_CONDITIONS[0]:
+                EXCEPTION_001:
                     SATISFIED,
             },
         },
@@ -1540,28 +1544,28 @@ def run_regression_tests() -> None:
             ),
             "decision": DEFINITE,
             "statuses": {
-                REQUIRED_CONDITIONS[0]:
+                REQUIRED_001:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[1]:
+                REQUIRED_002:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[2]:
+                REQUIRED_003:
                     SATISFIED,
 
-                REQUIRED_CONDITIONS[3]:
+                REQUIRED_004:
                     SATISFIED,
 
-                EXCLUSION_CONDITIONS[0]:
+                EXCLUSION_001:
                     NOT_SATISFIED,
 
-                EXCLUSION_CONDITIONS[1]:
+                EXCLUSION_002:
                     NOT_SATISFIED,
 
-                EXCLUSION_CONDITIONS[2]:
+                EXCLUSION_003:
                     NOT_SATISFIED,
 
-                EXCEPTION_CONDITIONS[0]:
+                EXCEPTION_001:
                     NOT_SATISFIED,
             },
         },
