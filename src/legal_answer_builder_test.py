@@ -39,6 +39,11 @@ from src.legal_decision_engine import (
     DecisionResult,
 )
 
+from src.legal_rule_registry import (
+    RULE_ID,
+    get_rule,
+)
+
 from src.legal_answer_builder import (
     BUILDER_VERSION,
 
@@ -76,7 +81,31 @@ from src.legal_answer_builder import (
 )
 
 
+# ============================================================
+# Canonical Condition Text Mapping
+# ============================================================
+
+_CANONICAL_RULE = get_rule(RULE_ID)
+
+CONDITION_TEXT_BY_ID = {
+    str(item["condition_id"]).strip(): str(item["condition"]).strip()
+    for item in _CANONICAL_RULE["condition_definitions"]
+}
+
+REQUIRED_001 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-001"]
+REQUIRED_002 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-002"]
+REQUIRED_003 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-003"]
+REQUIRED_004 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-004"]
+
+EXCLUSION_001 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCLUSION-001"]
+EXCLUSION_002 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCLUSION-002"]
+EXCLUSION_003 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCLUSION-003"]
+
+EXCEPTION_001 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCEPTION-001"]
+
+
 def _make_test_condition(
+    condition_id: str,
     condition: str,
     status: str,
     condition_type: str,
@@ -95,6 +124,7 @@ def _make_test_condition(
     """
 
     return ConditionView(
+        condition_id=condition_id,
         condition=condition,
         status=status,
         reason=reason,
@@ -113,56 +143,64 @@ def _make_test_structured_answer() -> StructuredAnswer:
 
     conditions = [
         _make_test_condition(
-            EXPECTED_REQUIRED_CONDITIONS[0],
+            "ARTICLE-14-REQUIRED-001",
+            REQUIRED_001,
             SATISFIED,
             REQUIRED,
             "测试：条件满足。",
         ),
 
         _make_test_condition(
-            EXPECTED_REQUIRED_CONDITIONS[1],
+            "ARTICLE-14-REQUIRED-002",
+            REQUIRED_002,
             SATISFIED,
             REQUIRED,
             "测试：后续合同存在。",
         ),
 
         _make_test_condition(
-            EXPECTED_REQUIRED_CONDITIONS[2],
+            "ARTICLE-14-REQUIRED-003",
+            REQUIRED_003,
             UNKNOWN,
             REQUIRED,
             "测试：无法仅根据合同次数确定。",
         ),
 
         _make_test_condition(
-            EXPECTED_REQUIRED_CONDITIONS[3],
+            "ARTICLE-14-REQUIRED-004",
+            REQUIRED_004,
             UNKNOWN,
             REQUIRED,
             "测试：用户未提供相关事实。",
         ),
 
         _make_test_condition(
-            EXPECTED_EXCLUSION_CONDITIONS[0],
+            "ARTICLE-14-EXCLUSION-001",
+            EXCLUSION_001,
             UNKNOWN,
             EXCLUSION,
             "测试：用户未提供相关事实。",
         ),
 
         _make_test_condition(
-            EXPECTED_EXCLUSION_CONDITIONS[1],
+            "ARTICLE-14-EXCLUSION-002",
+            EXCLUSION_002,
             UNKNOWN,
             EXCLUSION,
             "测试：用户未提供相关事实。",
         ),
 
         _make_test_condition(
-            EXPECTED_EXCLUSION_CONDITIONS[2],
+            "ARTICLE-14-EXCLUSION-003",
+            EXCLUSION_003,
             UNKNOWN,
             EXCLUSION,
             "测试：用户未提供相关事实。",
         ),
 
         _make_test_condition(
-            EXPECTED_EXCEPTION_CONDITIONS[0],
+            "ARTICLE-14-EXCEPTION-001",
+            EXCEPTION_001,
             UNKNOWN,
             EXCEPTION,
             "测试：用户未提供相关事实。",
@@ -177,17 +215,17 @@ def _make_test_structured_answer() -> StructuredAnswer:
         ],
 
         satisfied_conditions=[
-            EXPECTED_REQUIRED_CONDITIONS[0],
-            EXPECTED_REQUIRED_CONDITIONS[1],
+            REQUIRED_001,
+            REQUIRED_002,
         ],
 
         unknown_conditions=[
-            EXPECTED_REQUIRED_CONDITIONS[2],
-            EXPECTED_REQUIRED_CONDITIONS[3],
-            EXPECTED_EXCLUSION_CONDITIONS[0],
-            EXPECTED_EXCLUSION_CONDITIONS[1],
-            EXPECTED_EXCLUSION_CONDITIONS[2],
-            EXPECTED_EXCEPTION_CONDITIONS[0],
+            REQUIRED_003,
+            REQUIRED_004,
+            EXCLUSION_001,
+            EXCLUSION_002,
+            EXCLUSION_003,
+            EXCEPTION_001,
         ],
 
         not_satisfied_conditions=[],
@@ -656,8 +694,10 @@ def run_decision_compatibility_test() -> None:
 
         "condition_results": [
             {
+                "condition_id":
+                    "ARTICLE-14-REQUIRED-001",
                 "condition":
-                    EXPECTED_REQUIRED_CONDITIONS[0],
+                    REQUIRED_001,
                 "status":
                     SATISFIED,
                 "reason":
@@ -666,8 +706,10 @@ def run_decision_compatibility_test() -> None:
                     REQUIRED,
             },
             {
+                "condition_id":
+                    "ARTICLE-14-REQUIRED-002",
                 "condition":
-                    EXPECTED_REQUIRED_CONDITIONS[1],
+                    REQUIRED_002,
                 "status":
                     SATISFIED,
                 "reason":
@@ -676,8 +718,10 @@ def run_decision_compatibility_test() -> None:
                     REQUIRED,
             },
             {
+                "condition_id":
+                    "ARTICLE-14-REQUIRED-003",
                 "condition":
-                    EXPECTED_REQUIRED_CONDITIONS[2],
+                    REQUIRED_003,
                 "status":
                     UNKNOWN,
                 "reason":
@@ -686,8 +730,10 @@ def run_decision_compatibility_test() -> None:
                     REQUIRED,
             },
             {
+                "condition_id":
+                    "ARTICLE-14-REQUIRED-004",
                 "condition":
-                    EXPECTED_REQUIRED_CONDITIONS[3],
+                    REQUIRED_004,
                 "status":
                     UNKNOWN,
                 "reason":
@@ -696,8 +742,10 @@ def run_decision_compatibility_test() -> None:
                     REQUIRED,
             },
             {
+                "condition_id":
+                    "ARTICLE-14-EXCLUSION-001",
                 "condition":
-                    EXPECTED_EXCLUSION_CONDITIONS[0],
+                    EXCLUSION_001,
                 "status":
                     UNKNOWN,
                 "reason":
@@ -706,8 +754,10 @@ def run_decision_compatibility_test() -> None:
                     EXCLUSION,
             },
             {
+                "condition_id":
+                    "ARTICLE-14-EXCLUSION-002",
                 "condition":
-                    EXPECTED_EXCLUSION_CONDITIONS[1],
+                    EXCLUSION_002,
                 "status":
                     UNKNOWN,
                 "reason":
@@ -716,8 +766,10 @@ def run_decision_compatibility_test() -> None:
                     EXCLUSION,
             },
             {
+                "condition_id":
+                    "ARTICLE-14-EXCLUSION-003",
                 "condition":
-                    EXPECTED_EXCLUSION_CONDITIONS[2],
+                    EXCLUSION_003,
                 "status":
                     UNKNOWN,
                 "reason":
@@ -726,8 +778,10 @@ def run_decision_compatibility_test() -> None:
                     EXCLUSION,
             },
             {
+                "condition_id":
+                    "ARTICLE-14-EXCEPTION-001",
                 "condition":
-                    EXPECTED_EXCEPTION_CONDITIONS[0],
+                    EXCEPTION_001,
                 "status":
                     UNKNOWN,
                 "reason":
