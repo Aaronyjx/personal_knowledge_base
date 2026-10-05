@@ -1506,6 +1506,290 @@ def case_10_unknown_one_to_one() -> None:
     print("PASS")
 
 
+
+
+
+
+# ============================================================
+# CASE 11
+# Stable Condition ID → Answer Layer State Fidelity
+# ============================================================
+
+def case_11_stable_condition_id_state_fidelity() -> None:
+
+    print()
+    print("=" * 70)
+    print(
+        "CASE 11: Stable Condition ID → "
+        "Answer Layer State Fidelity"
+    )
+    print("=" * 70)
+
+    # ========================================================
+    # 使用现有 Decision → Answer 测试工厂构造完整 8 条条件
+    # ========================================================
+
+    statuses = {
+        REQUIRED_CONDITIONS[0]: SATISFIED,
+        REQUIRED_CONDITIONS[1]: SATISFIED,
+        REQUIRED_CONDITIONS[2]: UNKNOWN,
+        REQUIRED_CONDITIONS[3]: UNKNOWN,
+
+        EXCLUSION_CONDITIONS[0]: UNKNOWN,
+        EXCLUSION_CONDITIONS[1]: UNKNOWN,
+        EXCLUSION_CONDITIONS[2]: UNKNOWN,
+
+        EXCEPTION_CONDITIONS[0]: UNKNOWN,
+    }
+
+    decision = make_decision_result(
+        decision=CONDITIONAL,
+        statuses=statuses,
+        explicit_facts=[
+            TEST_USER_FACT,
+        ],
+    )
+
+    # ========================================================
+    # 1. Engine ConditionResult 必须严格为 8 条
+    # ========================================================
+
+    condition_results = decision.condition_results
+
+    assert_equal(
+        len(condition_results),
+        8,
+        "Engine ConditionResult 必须严格为 8 条",
+    )
+
+    # ========================================================
+    # 2. Stable Condition ID → Engine Status
+    # ========================================================
+
+    expected_status_by_id = {
+        "ARTICLE-14-REQUIRED-001": SATISFIED,
+        "ARTICLE-14-REQUIRED-002": SATISFIED,
+        "ARTICLE-14-REQUIRED-003": UNKNOWN,
+        "ARTICLE-14-REQUIRED-004": UNKNOWN,
+
+        "ARTICLE-14-EXCLUSION-001": UNKNOWN,
+        "ARTICLE-14-EXCLUSION-002": UNKNOWN,
+        "ARTICLE-14-EXCLUSION-003": UNKNOWN,
+
+        "ARTICLE-14-EXCEPTION-001": UNKNOWN,
+    }
+
+    actual_status_by_id = {
+        result.condition_id: result.status
+        for result in condition_results
+    }
+
+    assert_equal(
+        set(actual_status_by_id),
+        set(expected_status_by_id),
+        "Engine ConditionResult 的 Stable ID 集合异常",
+    )
+
+    assert_equal(
+        actual_status_by_id,
+        expected_status_by_id,
+        "Stable Condition ID → Status 映射异常",
+    )
+
+    print(
+        "PASS: 8 个 Stable Condition ID 全部存在"
+    )
+
+    print(
+        "PASS: Engine 状态 = SATISFIED × 2 + UNKNOWN × 6"
+    )
+
+    # ========================================================
+    # 3. 验证 ConditionResult 的类型也与 Stable ID 一致
+    # ========================================================
+
+    expected_type_by_id = {
+        "ARTICLE-14-REQUIRED-001": REQUIRED,
+        "ARTICLE-14-REQUIRED-002": REQUIRED,
+        "ARTICLE-14-REQUIRED-003": REQUIRED,
+        "ARTICLE-14-REQUIRED-004": REQUIRED,
+
+        "ARTICLE-14-EXCLUSION-001": EXCLUSION,
+        "ARTICLE-14-EXCLUSION-002": EXCLUSION,
+        "ARTICLE-14-EXCLUSION-003": EXCLUSION,
+
+        "ARTICLE-14-EXCEPTION-001": EXCEPTION,
+    }
+
+    actual_type_by_id = {
+        result.condition_id: result.condition_type
+        for result in condition_results
+    }
+
+    assert_equal(
+        actual_type_by_id,
+        expected_type_by_id,
+        "Stable Condition ID → Condition Type 映射异常",
+    )
+
+    print(
+        "PASS: Stable Condition ID → Condition Type 映射正确"
+    )
+
+    # ========================================================
+    # 4. 转换成 Final Validation 使用的 Decision Dict
+    # ========================================================
+
+    validation_decision = decision_to_validation_dict(
+        decision
+    )
+
+    # ========================================================
+    # 5. 模拟 LLM 恶意修改全部 6 个 UNKNOWN
+    #
+    # REQUIRED UNKNOWN × 2
+    # EXCLUSION UNKNOWN × 3
+    # EXCEPTION UNKNOWN × 1
+    # ========================================================
+
+    malicious_answer = (
+        "【结论】\n"
+        "目前不能仅根据现有事实确定必须签订无固定期限劳动合同。\n\n"
+        "【法律依据】\n"
+        "《中华人民共和国劳动合同法》第十四条。\n\n"
+        "【法律分析】\n"
+        f"- 用户事实：{TEST_USER_FACT}\n"
+        "- 连续订立二次固定期限劳动合同：已满足\n"
+        "- 存在后续订立的劳动合同：已满足\n"
+        "- 续订劳动合同：已满足\n"
+        "- 劳动者提出或者同意续订、订立劳动合同：不满足\n"
+        "- 劳动者存在《劳动合同法》第三十九条规定的情形：已满足\n"
+        "- 劳动者存在《劳动合同法》第四十条第一项规定的情形：不满足\n"
+        "- 劳动者存在《劳动合同法》第四十条第二项规定的情形：已满足\n"
+        "- 劳动者提出订立固定期限劳动合同：不满足\n\n"
+        "【需要注意】\n"
+        "当前仍需结合具体事实判断。"
+    )
+
+    # ========================================================
+    # 6. Validator 必须拒绝 UNKNOWN 状态篡改
+    # ========================================================
+
+    validation = validate_unknown_conditions(
+        malicious_answer,
+        validation_decision,
+    )
+
+    assert_false(
+        validation,
+        "Validator 未拦截 UNKNOWN 状态篡改",
+    )
+
+    print(
+        "PASS: Validator 拦截 UNKNOWN 状态篡改"
+    )
+
+    # ========================================================
+    # 7. Final Validation 必须回到 Engine State
+    # ========================================================
+
+    final_answer = final_validation(
+        answer=clean_answer(
+            malicious_answer
+        ),
+        question=TEST_USER_FACT,
+        decision=validation_decision,
+    )
+
+    assert_true(
+        bool(final_answer),
+        "Final Validation 未返回最终答案",
+    )
+
+    assert_equal(
+        validation_decision["decision"],
+        CONDITIONAL,
+        "Final Validation 不得修改 Engine Decision",
+    )
+
+    print(
+        "PASS: Decision = CONDITIONAL"
+    )
+
+    # ========================================================
+    # 8. Final Answer 必须保留全部 6 个 UNKNOWN 条件
+    # ========================================================
+
+    unknown_conditions = [
+        "续订劳动合同",
+        "劳动者提出或者同意续订、订立劳动合同",
+        "劳动者存在《劳动合同法》第三十九条规定的情形",
+        "劳动者存在《劳动合同法》第四十条第一项规定的情形",
+        "劳动者存在《劳动合同法》第四十条第二项规定的情形",
+        "劳动者提出订立固定期限劳动合同",
+    ]
+
+    for condition in unknown_conditions:
+
+        assert_true(
+            condition in final_answer,
+            "最终答案缺少 Engine UNKNOWN 条件："
+            + condition,
+        )
+
+    print(
+        "PASS: REQUIRED UNKNOWN × 2 保留"
+    )
+
+    print(
+        "PASS: EXCLUSION UNKNOWN × 3 保留"
+    )
+
+    print(
+        "PASS: EXCEPTION UNKNOWN × 1 保留"
+    )
+
+    # ========================================================
+    # 9. Final Answer 不得保留恶意的确定状态
+    # ========================================================
+
+    forbidden_patterns = [
+        "续订劳动合同：已满足",
+        "续订劳动合同：不满足",
+
+        "劳动者提出或者同意续订、订立劳动合同：已满足",
+        "劳动者提出或者同意续订、订立劳动合同：不满足",
+
+        "劳动者存在《劳动合同法》第三十九条规定的情形：已满足",
+        "劳动者存在《劳动合同法》第三十九条规定的情形：不满足",
+
+        "劳动者存在《劳动合同法》第四十条第一项规定的情形：已满足",
+        "劳动者存在《劳动合同法》第四十条第一项规定的情形：不满足",
+
+        "劳动者存在《劳动合同法》第四十条第二项规定的情形：已满足",
+        "劳动者存在《劳动合同法》第四十条第二项规定的情形：不满足",
+
+        "劳动者提出订立固定期限劳动合同：已满足",
+        "劳动者提出订立固定期限劳动合同：不满足",
+    ]
+
+    for pattern in forbidden_patterns:
+
+        assert_false(
+            pattern in final_answer,
+            "最终答案存在 UNKNOWN 状态反转："
+            + pattern,
+        )
+
+    print(
+        "PASS: 6 个 UNKNOWN 均未被改写"
+    )
+
+    print()
+    print(
+        "CASE 11 PASS"
+    )
+
 # ============================================================
 # Main
 # ============================================================
@@ -1580,6 +1864,7 @@ def main() -> None:
     case_09_decision_consistency_across_layers()
 
     case_10_unknown_one_to_one()
+    case_11_stable_condition_id_state_fidelity()
 
     print()
     print("=" * 70)
