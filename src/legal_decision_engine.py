@@ -715,6 +715,13 @@ def build_rule_dependency(
 
     not_proven_by_fact: List[str] = []
 
+    condition_text_by_id = {
+        str(item["condition_id"]).strip(): str(
+            item["condition"]
+        ).strip()
+        for item in _CANONICAL_RULE["condition_definitions"]
+    }
+
     if (
         contract_sequence is not None
         and contract_sequence.count >= 3
@@ -723,15 +730,15 @@ def build_rule_dependency(
 
         satisfied_by_fact.extend(
             [
-                REQUIRED_CONDITIONS[0],
-                REQUIRED_CONDITIONS[1],
+                condition_text_by_id["ARTICLE-14-REQUIRED-001"],
+                condition_text_by_id["ARTICLE-14-REQUIRED-002"],
             ]
         )
 
         not_proven_by_fact.extend(
             [
-                REQUIRED_CONDITIONS[2],
-                REQUIRED_CONDITIONS[3],
+                condition_text_by_id["ARTICLE-14-REQUIRED-003"],
+                condition_text_by_id["ARTICLE-14-REQUIRED-004"],
                 "劳动者不存在《劳动合同法》第三十九条规定的情形",
                 "劳动者不存在《劳动合同法》第四十条第一项规定的情形",
                 "劳动者不存在《劳动合同法》第四十条第二项规定的情形",
@@ -755,14 +762,14 @@ def build_rule_dependency(
     ):
 
         satisfied_by_fact.append(
-            REQUIRED_CONDITIONS[0]
+            condition_text_by_id["ARTICLE-14-REQUIRED-001"]
         )
 
         not_proven_by_fact.extend(
             [
-                REQUIRED_CONDITIONS[1],
-                REQUIRED_CONDITIONS[2],
-                REQUIRED_CONDITIONS[3],
+                condition_text_by_id["ARTICLE-14-REQUIRED-002"],
+                condition_text_by_id["ARTICLE-14-REQUIRED-003"],
+                condition_text_by_id["ARTICLE-14-REQUIRED-004"],
                 "劳动者不存在《劳动合同法》第三十九条规定的情形",
                 "劳动者不存在《劳动合同法》第四十条第一项规定的情形",
                 "劳动者不存在《劳动合同法》第四十条第二项规定的情形",
