@@ -191,10 +191,8 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from src.legal_common import (
-    contains_any,
-    normalize_text,
-)
+from src.legal_common import normalize_text
+from src.legal_fact_context import contains_asserted_any
 
 
 # ============================================================
@@ -337,7 +335,7 @@ def has_completed_renewal(
         "第三次已续签劳动合同",
     ]
 
-    return contains_any(
+    return contains_asserted_any(
         text,
         renewal_patterns,
     )
@@ -580,7 +578,7 @@ def has_worker_agreement(
 
     text = normalize_text(question)
 
-    return contains_any(
+    return contains_asserted_any(
         text,
         WORKER_AGREEMENT_PATTERNS,
     )

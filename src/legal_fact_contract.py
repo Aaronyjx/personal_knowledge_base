@@ -108,10 +108,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from src.legal_common import (
-    contains_any,
-    normalize_text,
-)
+from src.legal_common import normalize_text
+from src.legal_fact_context import contains_asserted_any
 from src.legal_fact_models import ContractSequence
 from src.legal_fact_renewal import has_completed_renewal
 
@@ -172,7 +170,7 @@ def extract_contract_sequence(
         "连续订立了三次固定期限劳动合同",
     ]
 
-    if contains_any(
+    if contains_asserted_any(
         text,
         three_contract_patterns,
     ):
@@ -195,7 +193,7 @@ def extract_contract_sequence(
         "连续订立了两次固定期限劳动合同",
     ]
 
-    if contains_any(
+    if contains_asserted_any(
         text,
         two_contract_patterns,
     ):
@@ -250,7 +248,7 @@ def extract_contract_sequence(
             "又续签",
         ]
 
-        if contains_any(
+        if contains_asserted_any(
             text,
             later_renewal_patterns,
         ):

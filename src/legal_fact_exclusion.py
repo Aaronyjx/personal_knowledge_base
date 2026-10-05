@@ -156,10 +156,8 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from src.legal_common import (
-    contains_any,
-    normalize_text,
-)
+from src.legal_common import normalize_text
+from src.legal_fact_context import contains_asserted_any
 
 
 # ============================================================
@@ -440,13 +438,13 @@ def _extract_article_fact(
     错误捕获。
     """
 
-    if contains_any(
+    if contains_asserted_any(
         text,
         negative_patterns,
     ):
         return "negative"
 
-    if contains_any(
+    if contains_asserted_any(
         text,
         positive_patterns,
     ):
@@ -624,7 +622,7 @@ def extract_fixed_term_exception_fact(
     # 负面事实优先
     # --------------------------------------------------------
 
-    if contains_any(
+    if contains_asserted_any(
         text,
         FIXED_TERM_EXCEPTION_NEGATIVE_PATTERNS,
     ):
@@ -634,7 +632,7 @@ def extract_fixed_term_exception_fact(
     # 正面事实
     # --------------------------------------------------------
 
-    if contains_any(
+    if contains_asserted_any(
         text,
         FIXED_TERM_EXCEPTION_PATTERNS,
     ):
@@ -675,7 +673,7 @@ def extract_combined_article_39_40_negative_facts(
 
     text = normalize_text(question)
 
-    if not contains_any(
+    if not contains_asserted_any(
         text,
         COMBINED_ARTICLE_39_40_NEGATIVE_PATTERNS,
     ):
