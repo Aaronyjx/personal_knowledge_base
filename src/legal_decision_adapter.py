@@ -378,26 +378,56 @@ def build_fact_condition_mappings(
     )
 
     # ========================================================
-    # V6.1：集中建立语义条件别名
+    # V6.2：使用 Stable Condition ID 建立语义条件别名
     #
-    # 条件来源仍然唯一来自 Canonical Rule Registry。
-    # 这里不重新定义条件，也不改变条件顺序。
+    # 条件身份唯一来自 Canonical Rule Registry。
     #
-    # 目的：
-    #   将 positional coupling 集中在本映射区域，
-    #   避免业务逻辑直接散落使用 canonical_conditions[N]。
+    # condition_id：
+    #   机器可识别的稳定条件身份。
+    #
+    # condition：
+    #   对应的法律条件文本，用于现有 Fact → Condition
+    #   Mapping 及 Prompt 展示。
+    #
+    # Adapter 不再通过 canonical_conditions[N] 推导条件身份。
     # ========================================================
 
-    target_condition = canonical_conditions[0]
+    condition_definitions = canonical_rule[
+        "condition_definitions"
+    ]
 
-    renewal_condition = canonical_conditions[2]
-    worker_agreement_condition = canonical_conditions[3]
+    conditions_by_id = {
+        str(item["condition_id"]).strip(): item
+        for item in condition_definitions
+    }
 
-    article_39_condition = canonical_exclusion_conditions[0]
-    article_40_1_condition = canonical_exclusion_conditions[1]
-    article_40_2_condition = canonical_exclusion_conditions[2]
+    target_condition = conditions_by_id[
+        "ARTICLE-14-REQUIRED-001"
+    ]["condition"]
 
-    fixed_term_exception_condition = canonical_exception_conditions[0]
+    renewal_condition = conditions_by_id[
+        "ARTICLE-14-REQUIRED-003"
+    ]["condition"]
+
+    worker_agreement_condition = conditions_by_id[
+        "ARTICLE-14-REQUIRED-004"
+    ]["condition"]
+
+    article_39_condition = conditions_by_id[
+        "ARTICLE-14-EXCLUSION-001"
+    ]["condition"]
+
+    article_40_1_condition = conditions_by_id[
+        "ARTICLE-14-EXCLUSION-002"
+    ]["condition"]
+
+    article_40_2_condition = conditions_by_id[
+        "ARTICLE-14-EXCLUSION-003"
+    ]["condition"]
+
+    fixed_term_exception_condition = conditions_by_id[
+        "ARTICLE-14-EXCEPTION-001"
+    ]["condition"]
 
     for rule in normalized_rules:
 
