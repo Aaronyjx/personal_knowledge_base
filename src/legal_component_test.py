@@ -51,17 +51,21 @@ from src.legal_rule_registry import (
 
 _CANONICAL_RULE = get_rule(RULE_ID)
 
-REQUIRED_CONDITIONS = list(
-    _CANONICAL_RULE["conditions"]
-)
+CONDITION_TEXT_BY_ID = {
+    str(item["condition_id"]).strip(): str(item["condition"]).strip()
+    for item in _CANONICAL_RULE["condition_definitions"]
+}
 
-EXCLUSION_CONDITIONS = list(
-    _CANONICAL_RULE["exclusion_conditions"]
-)
+REQUIRED_001 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-001"]
+REQUIRED_002 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-002"]
+REQUIRED_003 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-003"]
+REQUIRED_004 = CONDITION_TEXT_BY_ID["ARTICLE-14-REQUIRED-004"]
 
-EXCEPTION_CONDITIONS = list(
-    _CANONICAL_RULE["exceptions"]
-)
+EXCLUSION_001 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCLUSION-001"]
+EXCLUSION_002 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCLUSION-002"]
+EXCLUSION_003 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCLUSION-003"]
+
+EXCEPTION_001 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCEPTION-001"]
 
 from src.legal_pipeline import (
     run_decision_engine,
@@ -212,7 +216,7 @@ def component_test():
             item for item in mappings
             if isinstance(item, dict)
             and normalize_text(item.get("condition", ""))
-            == REQUIRED_CONDITIONS[0]
+            == REQUIRED_001
         ),
         None,
     )
@@ -246,12 +250,12 @@ def component_test():
     )
 
     forbidden_proofs = {
-        REQUIRED_CONDITIONS[2],
-        REQUIRED_CONDITIONS[3],
-        EXCLUSION_CONDITIONS[0],
-        EXCLUSION_CONDITIONS[1],
-        EXCLUSION_CONDITIONS[2],
-        EXCEPTION_CONDITIONS[0],
+        REQUIRED_003,
+        REQUIRED_004,
+        EXCLUSION_001,
+        EXCLUSION_002,
+        EXCLUSION_003,
+        EXCEPTION_001,
     }
 
     assert forbidden_proofs.issubset(
@@ -326,8 +330,8 @@ def component_test():
     )
 
     assert satisfied == {
-        REQUIRED_CONDITIONS[0],
-        REQUIRED_CONDITIONS[1],
+        REQUIRED_001,
+        REQUIRED_002,
     }, (
         "V6.1 Component Test：当前事实下应满足数量门槛和后续合同存在条件"
     )
@@ -349,8 +353,8 @@ def component_test():
     }
 
     assert unknown_names == {
-        REQUIRED_CONDITIONS[2],
-        REQUIRED_CONDITIONS[3],
+        REQUIRED_003,
+        REQUIRED_004,
     }, (
         "V6.1 Component Test：Required UNKNOWN 条件集合错误"
     )
