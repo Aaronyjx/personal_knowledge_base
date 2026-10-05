@@ -116,6 +116,12 @@ from src.legal_answer_builder import (
     build_prompt_context,
 )
 
+from src.legal_answer_views import (
+    build_plain_answer,
+    build_answer_context,
+    summarize_structured_answer,
+)
+
 from src.legal_prompt import (
     build_deterministic_engine_state_block,
     build_ollama_prompt,
@@ -1812,6 +1818,193 @@ def case_11_stable_condition_id_state_fidelity() -> None:
         "CASE 11 PASS"
     )
 
+
+# ============================================================
+# CASE 12
+# Answer View Contract
+# ============================================================
+
+def case_12_answer_view_contract() -> None:
+    """
+    验证 StructuredAnswer → Answer Views 的稳定输出契约。
+
+    本测试不进行法律推理。
+
+    只验证：
+
+        StructuredAnswer
+            ↓
+        Plain Answer
+        Answer Context
+        Structured Summary
+    """
+
+    print()
+    print("=" * 70)
+    print(
+        "CASE 12: Answer View Contract"
+    )
+    print("=" * 70)
+
+    decision = make_decision_result(
+        decision=CONDITIONAL,
+        statuses=conditional_statuses(),
+    )
+
+    structured = (
+        adapt_decision_for_answer_builder(
+            decision
+        )
+    )
+
+    # ========================================================
+    # Plain Answer
+    # ========================================================
+
+    plain = build_plain_answer(
+        structured
+    )
+
+    assert_true(
+        "CONDITIONAL" in plain,
+        "Plain Answer 必须保留 CONDITIONAL",
+    )
+
+    assert_true(
+        TEST_USER_FACT in plain,
+        "Plain Answer 必须保留用户明确事实",
+    )
+
+    assert_true(
+        REQUIRED_003 in plain,
+        "Plain Answer 必须保留 UNKNOWN 条件",
+    )
+
+    assert_true(
+        "UNKNOWN" in plain,
+        "Plain Answer 必须保留 UNKNOWN 状态",
+    )
+
+    # ========================================================
+    # Answer Context
+    # ========================================================
+
+    context = build_answer_context(
+        structured
+    )
+
+    assert_equal(
+        context.get("decision"),
+        CONDITIONAL,
+        "Answer Context 必须保留 Decision",
+    )
+
+    assert_true(
+        TEST_USER_FACT
+        in context.get("user_facts", []),
+        "Answer Context 必须保留用户事实",
+    )
+
+    assert_true(
+        REQUIRED_001
+        in context.get("satisfied_conditions", []),
+        "Answer Context 必须保留 SATISFIED 条件",
+    )
+
+    assert_true(
+        REQUIRED_003
+        in context.get("unknown_conditions", []),
+        "Answer Context 必须保留 UNKNOWN 条件",
+    )
+
+    assert_equal(
+        len(
+            context.get(
+                "required_conditions",
+                [],
+            )
+        ),
+        4,
+        "Answer Context REQUIRED 条件数量必须为 4",
+    )
+
+    assert_equal(
+        len(
+            context.get(
+                "exclusion_conditions",
+                [],
+            )
+        ),
+        3,
+        "Answer Context EXCLUSION 条件数量必须为 3",
+    )
+
+    assert_equal(
+        len(
+            context.get(
+                "exception_conditions",
+                [],
+            )
+        ),
+        1,
+        "Answer Context EXCEPTION 条件数量必须为 1",
+    )
+
+    # ========================================================
+    # Structured Summary
+    # ========================================================
+
+    summary = (
+        summarize_structured_answer(
+            structured
+        )
+    )
+
+    assert_true(
+        "Decision: CONDITIONAL" in summary,
+        "Summary 必须保留 Decision",
+    )
+
+    assert_true(
+        "Condition Results: 8" in summary,
+        "Summary 必须保留 Condition Results 数量",
+    )
+
+    assert_true(
+        "REQUIRED: 4" in summary,
+        "Summary 必须保留 REQUIRED 数量",
+    )
+
+    assert_true(
+        "EXCLUSION: 3" in summary,
+        "Summary 必须保留 EXCLUSION 数量",
+    )
+
+    assert_true(
+        "EXCEPTION: 1" in summary,
+        "Summary 必须保留 EXCEPTION 数量",
+    )
+
+    assert_true(
+        "Satisfied: 2" in summary,
+        "Summary 必须保留 SATISFIED 数量",
+    )
+
+    assert_true(
+        "Unknown: 2" in summary,
+        "Summary 必须保留 UNKNOWN 数量",
+    )
+
+    assert_true(
+        "Not Satisfied: 0" in summary,
+        "Summary 必须保留 NOT_SATISFIED 数量",
+    )
+
+    print(
+        "CASE 12 PASS"
+    )
+
+
 # ============================================================
 # Main
 # ============================================================
@@ -1887,6 +2080,8 @@ def main() -> None:
 
     case_10_unknown_one_to_one()
     case_11_stable_condition_id_state_fidelity()
+
+    case_12_answer_view_contract()
 
     print()
     print("=" * 70)

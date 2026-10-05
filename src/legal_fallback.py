@@ -327,25 +327,6 @@ def build_fallback_answer(
     # Structured Rules
     # ========================================================
 
-    print()
-    print("----------------------------------------------------------------------")
-    print("----------------------------------------------------------------------")
-    print("decision keys:")
-    print(list(decision.keys()))
-
-    print()
-    print("required_results:")
-    print(decision.get("required_results"))
-
-    print()
-    print("condition_results:")
-    print(decision.get("condition_results"))
-
-    print()
-    print("satisfied_conditions:")
-    print(decision.get("satisfied_conditions"))
-
-    print()
     rules = build_rules_from_articles(
         ensure_list(
             decision.get(
