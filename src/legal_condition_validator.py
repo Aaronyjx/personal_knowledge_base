@@ -612,12 +612,53 @@ def validate_unknown_conditions(
        并完整列出 Engine 的 UNKNOWN 条件，应当通过。
     """
 
-    unknown = ensure_list(
+    # ========================================================
+    # UNKNOWN 权威来源
+    # ========================================================
+    #
+    # 注意：
+    #
+    # StructuredAnswer 的 unknown_conditions
+    # 只表示 REQUIRED + UNKNOWN。
+    #
+    # Validator 必须验证 Engine 的全部 UNKNOWN：
+    #
+    #     REQUIRED   + UNKNOWN
+    #     EXCLUSION  + UNKNOWN
+    #     EXCEPTION  + UNKNOWN
+    #
+    # 因此这里必须直接读取完整 condition_results，
+    # 不能使用 decision["unknown_conditions"]。
+    # ========================================================
+
+
+    condition_results = ensure_list(
         decision.get(
-            "unknown_conditions",
+            "condition_results",
             [],
         )
     )
+
+    unknown = []
+
+    for item in condition_results:
+
+        if not isinstance(item, dict):
+            continue
+
+        status = normalize_text(
+            item.get("status", "")
+        ).upper()
+
+        if status != UNKNOWN:
+            continue
+
+        condition = normalize_text(
+            item.get("condition", "")
+        )
+
+        if condition:
+            unknown.append(condition)
 
     answer_text = normalize_text(answer)
 

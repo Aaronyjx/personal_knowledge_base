@@ -116,10 +116,42 @@ def build_deterministic_notices(
     5. 输出顺序保持 Engine 顺序。
     """
 
-    unknown_conditions = decision.get(
-        "unknown_conditions",
+    # 注意：
+    #
+    # StructuredAnswer 的 unknown_conditions
+    # 只表示 REQUIRED + UNKNOWN。
+    #
+    # 【需要注意】必须覆盖全部 ConditionResult 中的 UNKNOWN，
+    # 包括 REQUIRED / EXCLUSION / EXCEPTION。
+    #
+    # 因此这里必须直接读取完整 condition_results，
+    # 不能使用 decision["unknown_conditions"]。
+    condition_results = decision.get(
+        "condition_results",
         [],
     ) or []
+
+    unknown_conditions = []
+
+    for item in condition_results:
+
+        status = normalize_text(
+            get_field(
+                item,
+                "status",
+                "",
+            )
+        )
+
+        if status != "UNKNOWN":
+            continue
+
+        condition_text = _condition_text(item)
+
+        if condition_text:
+            unknown_conditions.append(
+                condition_text
+            )
 
     lines = [
         "【需要注意】"
