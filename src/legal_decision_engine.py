@@ -1608,14 +1608,21 @@ def evaluate_rule(
 
     决策原则：
 
-        1. 任意 NOT_SATISFIED
+        1. REQUIRED 条件存在 NOT_SATISFIED
            → NOT_ESTABLISHED
 
-        2. 没有 NOT_SATISFIED，
+        2. EXCLUSION 条件存在 SATISFIED
+           → NOT_ESTABLISHED
+
+        3. EXCEPTION 条件存在 SATISFIED
+           → NOT_ESTABLISHED
+
+        4. 没有上述阻断条件，
            但存在 UNKNOWN
            → CONDITIONAL
 
-        3. 全部 SATISFIED
+        5. 没有阻断条件，
+           且不存在 UNKNOWN
            → DEFINITE
     """
 
