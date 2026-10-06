@@ -109,6 +109,50 @@ def list_rules() -> List[str]:
     return list(_RULE_REGISTRY.keys())
 
 
+def find_rule_by_article(
+    law_name: str,
+    article_number: str,
+) -> Dict[str, Any] | None:
+    """
+    根据法律名称和条文号查找 Canonical Rule。
+
+    本函数只负责：
+
+        Article Identity
+            ↓
+        Canonical Rule
+
+    不负责：
+
+    - Retriever
+    - Rule Ranking
+    - LegalFacts
+    - Condition Matching
+    - Decision
+
+    匹配方式：
+
+        law_name + article_number
+
+    必须与 Canonical Rule 中的字段精确一致。
+
+    找不到对应 Canonical Rule 时返回 None。
+
+    返回值使用 deepcopy，
+    防止调用方修改 Registry 内部对象。
+    """
+
+    for rule in _RULE_REGISTRY.values():
+
+        if (
+            rule.get("law_name") == law_name
+            and rule.get("article_number") == article_number
+        ):
+            return deepcopy(rule)
+
+    return None
+
+
 # ============================================================
 # Module Self Test
 # ============================================================

@@ -334,13 +334,15 @@ def run_answer_builder(
     # ========================================================
     # 2. Engine ConditionResult
     #
-    # V6.0-27 强制要求：
+    # V6.2：
     #
-    #     ConditionResult = 8
+    #     ConditionResult 的期望数量
+    #     必须来自当前 Runtime Rule。
     #
-    # 这里仍然属于 Pipeline 完整性保护。
-    #
-    # 但不再自己分类 ConditionResult。
+    # Pipeline 只做完整性保护，
+    # 不自行选择 Rule，
+    # 不自行分类 ConditionResult，
+    # 不根据实际结果数量推导期望数量。
     # ========================================================
 
     engine_condition_results = ensure_list(
@@ -357,11 +359,68 @@ def run_answer_builder(
             "Decision Engine 未返回 condition_results"
         )
 
-    if len(engine_condition_results) != 8:
+    runtime_rule = get_field(
+        decision,
+        "selected_rule",
+        None,
+    )
+
+    if not isinstance(runtime_rule, dict):
 
         raise ValueError(
-            "V6.0-27 要求 "
-            f"ConditionResult = 8，"
+            "Decision Engine 未返回有效 Runtime Rule"
+        )
+
+    required_conditions = runtime_rule.get(
+        "conditions",
+        [],
+    )
+
+    exclusion_conditions = runtime_rule.get(
+        "exclusion_conditions",
+        [],
+    )
+
+    exception_conditions = runtime_rule.get(
+        "exceptions",
+        [],
+    )
+
+    if not isinstance(
+        required_conditions,
+        list,
+    ):
+        raise ValueError(
+            "Runtime Rule.conditions 必须是 list"
+        )
+
+    if not isinstance(
+        exclusion_conditions,
+        list,
+    ):
+        raise ValueError(
+            "Runtime Rule.exclusion_conditions 必须是 list"
+        )
+
+    if not isinstance(
+        exception_conditions,
+        list,
+    ):
+        raise ValueError(
+            "Runtime Rule.exceptions 必须是 list"
+        )
+
+    expected_condition_count = (
+        len(required_conditions)
+        + len(exclusion_conditions)
+        + len(exception_conditions)
+    )
+
+    if len(engine_condition_results) != expected_condition_count:
+
+        raise ValueError(
+            "Runtime Rule 要求 "
+            f"ConditionResult = {expected_condition_count}，"
             f"当前为 {len(engine_condition_results)}"
         )
 
@@ -462,7 +521,7 @@ def run_answer_builder(
     )
 
     # ========================================================
-    # 8. V6.0-27 Condition Statistics
+    # 8. Condition Statistics
     #
     # StructuredAnswer 已经完成分类。
     #
@@ -613,7 +672,7 @@ def run_answer_builder(
     #
     # 进行完整状态覆盖验证。
     #
-    # 完整 8 条 ConditionResult 的状态统计，
+    # 完整 ConditionResult 的状态统计，
     # 必须直接来自 Engine ConditionResult。
     # ========================================================
 

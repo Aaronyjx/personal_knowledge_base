@@ -67,7 +67,6 @@ from src.legal_decision_engine import (
     SATISFIED,
     UNKNOWN,
     NOT_SATISFIED,
-    ALL_CONDITIONS,
     evaluate_rule,
     build_core_rule,
 )
@@ -101,6 +100,12 @@ EXCEPTION_001 = CONDITION_TEXT_BY_ID["ARTICLE-14-EXCEPTION-001"]
 REQUIRED_CONDITIONS = list(_CANONICAL_RULE["conditions"])
 EXCLUSION_CONDITIONS = list(_CANONICAL_RULE["exclusion_conditions"])
 EXCEPTION_CONDITIONS = list(_CANONICAL_RULE["exceptions"])
+
+ALL_CONDITIONS = (
+    REQUIRED_CONDITIONS
+    + EXCLUSION_CONDITIONS
+    + EXCEPTION_CONDITIONS
+)
 
 from src.legal_fact_models import (
     ContractSequence,

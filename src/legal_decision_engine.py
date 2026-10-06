@@ -199,12 +199,15 @@ from src.legal_common import (
 )
 
 from src.legal_decision_rules import (
-    LABOR_CONTRACT_LAW,
     build_core_rule,
 )
 
-from src.legal_rule_definition import (
-    RULE_ID,
+from src.legal_rule_selector import (
+    select_rule_from_articles,
+)
+
+from src.legal_runtime_rule_adapter import (
+    canonical_rule_to_runtime_rule,
 )
 
 from src.legal_rule_registry import (
@@ -290,25 +293,6 @@ IMPLEMENTING_REGULATIONS = (
 # Engine 判定逻辑；但条件的唯一来源改为 Rule Registry。
 # ============================================================
 
-_CANONICAL_RULE = get_rule(RULE_ID)
-
-REQUIRED_CONDITIONS = list(
-    _CANONICAL_RULE["conditions"]
-)
-
-EXCLUSION_CONDITIONS = list(
-    _CANONICAL_RULE["exclusion_conditions"]
-)
-
-EXCEPTION_CONDITIONS = list(
-    _CANONICAL_RULE["exceptions"]
-)
-
-ALL_CONDITIONS = (
-    REQUIRED_CONDITIONS
-    + EXCLUSION_CONDITIONS
-    + EXCEPTION_CONDITIONS
-)
 
 
 
@@ -691,6 +675,7 @@ def build_rule_dependency(
     contract_sequence: Optional[
         ContractSequence
     ],
+    rule: Dict[str, Any],
 ) -> RuleDependency:
     """
     建立用户事实与 Article 14 条件之间的依赖关系。
@@ -715,12 +700,42 @@ def build_rule_dependency(
 
     not_proven_by_fact: List[str] = []
 
+    condition_definitions = rule.get(
+        "condition_definitions",
+        [],
+    )
+
+    if not isinstance(
+        condition_definitions,
+        list,
+    ):
+        raise ValueError(
+            "Runtime Rule 的 condition_definitions "
+            "必须是 list。"
+        )
+
     condition_text_by_id = {
         str(item["condition_id"]).strip(): str(
             item["condition"]
         ).strip()
-        for item in _CANONICAL_RULE["condition_definitions"]
+        for item in condition_definitions
     }
+
+    runtime_conditions = (
+        list(rule.get("conditions", []))
+        + list(
+            rule.get(
+                "exclusion_conditions",
+                [],
+            )
+        )
+        + list(
+            rule.get(
+                "exceptions",
+                [],
+            )
+        )
+    )
 
     if (
         contract_sequence is not None
@@ -790,7 +805,7 @@ def build_rule_dependency(
     else:
 
         not_proven_by_fact = list(
-            ALL_CONDITIONS
+            runtime_conditions
         )
 
         explanation = (
@@ -1360,128 +1375,178 @@ def match_condition(
 
 def validate_condition_structure(
     condition_results: List[ConditionResult],
+    rule: Dict[str, Any],
 ) -> None:
     """
-    验证 Article 14 条件结构。
+    验证 Runtime Rule 对应的 ConditionResult 结构。
 
-    强约束：
+    V6.2：
+    当前验证完全依据传入的 Runtime Rule，
+    不再固定假设 Article 14 有 8 个条件。
 
-        ConditionResult = 8
+    验证来源：
+        rule["condition_definitions"]
 
-        REQUIRED   = 4
-        EXCLUSION  = 3
-        EXCEPTION  = 1
+    核心原则：
+        1. Rule 是当前条件结构的唯一来源。
+        2. ConditionResult 必须与 Rule 的
+           condition_definitions 完全一致。
+        3. REQUIRED / EXCLUSION / EXCEPTION
+           的数量由 Runtime Rule 动态计算。
     """
 
-    if len(condition_results) != 8:
-
+    if not isinstance(rule, dict):
         raise ValueError(
-            "Legal Decision Engine "
-            f"必须生成 8 个 ConditionResult，"
-            f"实际为 {len(condition_results)}。"
+            "Runtime Rule 必须是 dict。"
         )
+
+    canonical_condition_definitions = rule.get(
+        "condition_definitions",
+        [],
+    )
+
+    if not isinstance(canonical_condition_definitions, list):
+        raise ValueError(
+            "Runtime Rule 的 condition_definitions 必须是 list。"
+        )
+
+    if not canonical_condition_definitions:
+        raise ValueError(
+            "Runtime Rule 缺少 condition_definitions。"
+        )
+
+    # ========================================================
+    # Runtime Rule → Expected Condition Structure
+    # ========================================================
+
+    expected_condition_ids = []
+    expected_conditions = []
+    expected_condition_types = []
+
+    for index, definition in enumerate(
+        canonical_condition_definitions
+    ):
+        if not isinstance(definition, dict):
+            raise ValueError(
+                "Runtime Rule 的 condition_definitions "
+                f"第 {index + 1} 项必须是 dict。"
+            )
+
+        condition_id = str(
+            definition.get("condition_id", "")
+        ).strip()
+
+        condition = str(
+            definition.get("condition", "")
+        ).strip()
+
+        condition_type = str(
+            definition.get("condition_type", "")
+        ).strip()
+
+        if not condition_id:
+            raise ValueError(
+                "Runtime Rule 存在缺少 condition_id 的条件定义。"
+            )
+
+        if not condition:
+            raise ValueError(
+                f"Runtime Rule 条件 {condition_id} 缺少 condition。"
+            )
+
+        if condition_type not in {
+            "REQUIRED",
+            "EXCLUSION",
+            "EXCEPTION",
+        }:
+            raise ValueError(
+                f"Runtime Rule 条件 {condition_id} "
+                f"存在非法 condition_type：{condition_type}"
+            )
+
+        expected_condition_ids.append(condition_id)
+        expected_conditions.append(condition)
+        expected_condition_types.append(condition_type)
+
+    expected_count = len(canonical_condition_definitions)
+
+    # ========================================================
+    # Expected Condition ID 必须唯一
+    # ========================================================
+
+    if len(set(expected_condition_ids)) != expected_count:
+        raise ValueError(
+            "Runtime Rule 的 condition_id 存在重复。"
+        )
+
+    # ========================================================
+    # ConditionResult 数量
+    # ========================================================
+
+    if len(condition_results) != expected_count:
+        raise ValueError(
+            "ConditionResult 数量与 Runtime Rule "
+            f"condition_definitions 数量不一致："
+            f"expected={expected_count}, "
+            f"actual={len(condition_results)}"
+        )
+
+    # ========================================================
+    # Condition Type 数量
+    # ========================================================
+
+    expected_required_count = expected_condition_types.count(
+        "REQUIRED"
+    )
+    expected_exclusion_count = expected_condition_types.count(
+        "EXCLUSION"
+    )
+    expected_exception_count = expected_condition_types.count(
+        "EXCEPTION"
+    )
 
     required_results = [
         item
         for item in condition_results
-        if item.condition_type == REQUIRED
+        if item.condition_type == "REQUIRED"
     ]
 
     exclusion_results = [
         item
         for item in condition_results
-        if item.condition_type == EXCLUSION
+        if item.condition_type == "EXCLUSION"
     ]
 
     exception_results = [
         item
         for item in condition_results
-        if item.condition_type == EXCEPTION
+        if item.condition_type == "EXCEPTION"
     ]
 
-    if len(required_results) != 4:
-
+    if len(required_results) != expected_required_count:
         raise ValueError(
-            "REQUIRED 条件必须为 4 个，"
-            f"实际为 {len(required_results)}。"
+            "REQUIRED ConditionResult 数量与 Runtime Rule 不一致："
+            f"expected={expected_required_count}, "
+            f"actual={len(required_results)}"
         )
 
-    if len(exclusion_results) != 3:
-
+    if len(exclusion_results) != expected_exclusion_count:
         raise ValueError(
-            "EXCLUSION 条件必须为 3 个，"
-            f"实际为 {len(exclusion_results)}。"
+            "EXCLUSION ConditionResult 数量与 Runtime Rule 不一致："
+            f"expected={expected_exclusion_count}, "
+            f"actual={len(exclusion_results)}"
         )
 
-    if len(exception_results) != 1:
-
+    if len(exception_results) != expected_exception_count:
         raise ValueError(
-            "EXCEPTION 条件必须为 1 个，"
-            f"实际为 {len(exception_results)}。"
+            "EXCEPTION ConditionResult 数量与 Runtime Rule 不一致："
+            f"expected={expected_exception_count}, "
+            f"actual={len(exception_results)}"
         )
 
-    # --------------------------------------------------------
-    # V6.2 Stable Condition Identity Validation
-    # --------------------------------------------------------
-    #
-    # condition_id 是机器身份。
-    #
-    # Validator 不重新硬编码 ARTICLE-14-* ID，
-    # 而是从 Canonical Rule 派生预期身份。
-    #
-    # 因此身份来源保持唯一：
-    #
-    #     Canonical Definition
-    #             ↓
-    #     Runtime Rule
-    #             ↓
-    #     ConditionResult
-    #             ↓
-    #     Validator
-    # --------------------------------------------------------
-
-    canonical_condition_definitions = (
-        _CANONICAL_RULE.get(
-            "condition_definitions",
-            [],
-        )
-    )
-
-    if not isinstance(
-        canonical_condition_definitions,
-        list,
-    ):
-        raise ValueError(
-            "Canonical Rule 的 condition_definitions "
-            "必须是 list。"
-        )
-
-    if len(canonical_condition_definitions) != 8:
-        raise ValueError(
-            "Canonical Rule 的 condition_definitions "
-            "必须为 8 个，"
-            f"实际为 {len(canonical_condition_definitions)}。"
-        )
-
-    expected_condition_ids = [
-        str(item.get("condition_id", "")).strip()
-        for item in canonical_condition_definitions
-    ]
-
-    if any(
-        not condition_id
-        for condition_id in expected_condition_ids
-    ):
-        raise ValueError(
-            "Canonical Rule 的 condition_definitions "
-            "存在空 condition_id。"
-        )
-
-    if len(set(expected_condition_ids)) != 8:
-        raise ValueError(
-            "Canonical Rule 的 condition_definitions "
-            "存在重复 condition_id。"
-        )
+    # ========================================================
+    # ConditionResult ID 必须完整且顺序一致
+    # ========================================================
 
     actual_condition_ids = [
         str(item.condition_id).strip()
@@ -1493,30 +1558,39 @@ def validate_condition_structure(
         for condition_id in actual_condition_ids
     ):
         raise ValueError(
-            "ConditionResult 存在空 condition_id。"
+            "ConditionResult 存在缺少 condition_id 的结果。"
         )
 
-    if len(set(actual_condition_ids)) != 8:
+    if len(set(actual_condition_ids)) != expected_count:
         raise ValueError(
-            "ConditionResult 存在重复 condition_id。"
+            "ConditionResult 的 condition_id 存在重复。"
         )
 
     if actual_condition_ids != expected_condition_ids:
         raise ValueError(
-            "ConditionResult 的 condition_id 顺序或集合"
-            "与 Canonical Rule 不一致。"
+            "ConditionResult condition_id 顺序或集合 "
+            "与 Runtime Rule 不一致。"
+            f"\nexpected={expected_condition_ids}"
+            f"\nactual={actual_condition_ids}"
         )
 
+    # ========================================================
+    # condition / condition_type 必须与 Rule 完全一致
+    # ========================================================
+
     expected_by_id = {
-        str(item.get("condition_id", "")).strip(): (
-            str(item.get("condition", "")).strip(),
-            str(item.get("condition_type", "")).strip(),
+        condition_id: (
+            condition,
+            condition_type,
         )
-        for item in canonical_condition_definitions
+        for condition_id, condition, condition_type in zip(
+            expected_condition_ids,
+            expected_conditions,
+            expected_condition_types,
+        )
     }
 
     for item in condition_results:
-
         condition_id = str(
             item.condition_id
         ).strip()
@@ -1535,50 +1609,39 @@ def validate_condition_structure(
 
         if actual_condition != expected_condition:
             raise ValueError(
-                "ConditionResult 的 condition_id 与 "
-                "condition 文本不匹配："
-                f"{condition_id}"
+                "ConditionResult condition 与 Runtime Rule 不一致："
+                f"condition_id={condition_id}"
+                f"\nexpected={expected_condition}"
+                f"\nactual={actual_condition}"
             )
 
         if actual_type != expected_type:
             raise ValueError(
-                "ConditionResult 的 condition_id 与 "
-                "condition_type 不匹配："
-                f"{condition_id}"
+                "ConditionResult condition_type 与 Runtime Rule 不一致："
+                f"condition_id={condition_id}"
+                f"\nexpected={expected_type}"
+                f"\nactual={actual_type}"
             )
 
-    # --------------------------------------------------------
-    # V6.1 Compatibility Validation
-    # --------------------------------------------------------
-    #
-    # 保留原有 condition 文本验证，
-    # 确保 V6.2 Stable Identity 不破坏旧消费者。
-    # --------------------------------------------------------
+    # ========================================================
+    # 条件名称完整性
+    # ========================================================
 
     names = [
-        item.condition
+        str(item.condition).strip()
         for item in condition_results
     ]
 
-    if len(set(names)) != 8:
-
+    if len(set(names)) != expected_count:
         raise ValueError(
             "ConditionResult 存在重复条件。"
         )
 
-    if set(names) != set(
-        ALL_CONDITIONS
-    ):
-
+    if set(names) != set(expected_conditions):
         raise ValueError(
-            "ConditionResult 条件集合与"
-            "Article 14 固定条件集合不一致。"
+            "ConditionResult 条件集合与 Runtime Rule "
+            "condition_definitions 不一致。"
         )
-
-
-# ============================================================
-# Evaluate Rule
-# ============================================================
 
 def evaluate_rule(
     facts: LegalFacts,
@@ -1652,9 +1715,7 @@ def evaluate_rule(
     #
     # 因此 evaluate_rule() 不再通过：
     #
-    #     REQUIRED_CONDITIONS[0]
-    #     REQUIRED_CONDITIONS[1]
-    #     ...
+    #     条件列表中的固定位置
     #
     # 推导条件身份。
     #
@@ -1754,7 +1815,8 @@ def evaluate_rule(
     # --------------------------------------------------------
 
     validate_condition_structure(
-        condition_results
+        condition_results,
+        rule,
     )
 
     # --------------------------------------------------------
@@ -1850,90 +1912,69 @@ def select_core_rule(
     ] = None,
 ) -> Dict[str, Any]:
     """
-    选择 Article 14 核心规则。
+    选择当前请求对应的 Runtime Rule。
 
-    V6.0-16：
+    V6.2：
 
-        即使 Retriever 提供了结构化规则，
-        Decision Engine 仍然强制使用固定的
-        Article 14 条件结构。
+        Retriever Rules
+                ↓
+        Rule Selector
+                ↓
+        Canonical Rule
+                ↓
+        Runtime Rule Adapter
+                ↓
+        Runtime Rule
 
-    目的：
+    职责边界：
 
-        防止 Retriever 输出的条件结构漂移。
+        1. Rule Selector 决定使用哪个 Canonical Rule。
+        2. Runtime Adapter 将 Canonical Rule 转换为
+           Decision Engine 使用的 Runtime Rule。
+        3. 本函数不根据 Article Number 编写法律规则判断。
+        4. 本函数不从 Retriever 条件直接构造 Decision Rule。
+
+    V6.1 compatibility：
+
+        如果 Retriever 没有匹配到 Canonical Rule，
+        暂时回退到 build_core_rule()。
+
+        这样可以保持旧测试和无 Retriever Rule
+        场景的兼容性。
+
+    注意：
+
+        build_core_rule() 仍然保留，
+        但正常生产路径优先使用：
+
+            select_rule_from_articles()
+            →
+            canonical_rule_to_runtime_rule()
     """
 
-    rule = build_core_rule()
+    # ========================================================
+    # V6.2 Rule Selection
+    # ========================================================
 
-    if retrieved_articles:
+    canonical_rule = select_rule_from_articles(
+        retrieved_articles or []
+    )
 
-        for article in retrieved_articles:
+    if canonical_rule is not None:
 
-            if not isinstance(
-                article,
-                dict,
-            ):
-                continue
+        # ----------------------------------------------------
+        # Canonical Rule → Runtime Rule
+        # ----------------------------------------------------
 
-            article_text = normalize_text(
-                article.get(
-                    "article",
-                    ""
-                )
-            )
+        return canonical_rule_to_runtime_rule(
+            canonical_rule
+        )
 
-            law_name = normalize_text(
-                article.get(
-                    "law_name",
-                    ""
-                )
-            )
+    # ========================================================
+    # V6.1 Compatibility Fallback
+    # ========================================================
 
-            if (
-                "第十四条"
-                in article_text
-                or "第十四条"
-                in normalize_text(
-                    article.get(
-                        "title",
-                        ""
-                    )
-                )
-                or (
-                    law_name
-                    == LABOR_CONTRACT_LAW
-                    and "14"
-                    in article_text
-                )
-            ):
-
-                rule = dict(rule)
-
-                if article.get(
-                    "rule_text"
-                ):
-
-                    rule["rule_text"] = (
-                        article[
-                            "rule_text"
-                        ]
-                    )
-
-                break
-
-    # --------------------------------------------------------
-    # Canonical Rule 条件
-    # --------------------------------------------------------
-    #
-    # build_core_rule() 已经通过 Rule Registry
-    # 获取 Canonical Rule。
-    #
-    # 此处不再重复使用独立常量覆盖条件，
-    # 避免形成第二个 Rule Definition 来源。
-    # --------------------------------------------------------
-
-    return rule
-
+    return build_core_rule()
 
 # ============================================================
 # Decision Explanation
@@ -2165,6 +2206,7 @@ def make_decision(
     dependency = build_rule_dependency(
         normalized_question,
         contract_sequence,
+        core_rule,
     )
 
     # --------------------------------------------------------
@@ -2220,7 +2262,8 @@ def make_decision(
     # --------------------------------------------------------
 
     validate_decision_result(
-        result
+        result,
+        core_rule,
     )
 
     return result
@@ -2232,17 +2275,16 @@ def make_decision(
 
 def validate_decision_result(
     decision: DecisionResult,
+    rule: Dict[str, Any],
 ) -> None:
     """
     对最终 DecisionResult 进行结构验证。
 
-    强约束：
+    V6.2：
+        ConditionResult 结构由 Runtime Rule 决定。
 
-        ConditionResult = 8
-
-        REQUIRED   = 4
-        EXCLUSION  = 3
-        EXCEPTION  = 1
+        Validator 不再固定假设 Article 14
+        具有固定数量的条件。
     """
 
     if not isinstance(
@@ -2266,7 +2308,8 @@ def validate_decision_result(
         )
 
     validate_condition_structure(
-        decision.condition_results
+        decision.condition_results,
+        rule,
     )
 
     unknown_count = sum(

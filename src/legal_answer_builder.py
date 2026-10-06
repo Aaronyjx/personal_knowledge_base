@@ -60,12 +60,13 @@ V6.0-14 核心原则
 
 10. ConditionResult 的完整结构必须保留。
 
-11. V6.0-14 的 ConditionResult 固定结构：
+11. V6.2 的 ConditionResult 结构：
 
-       REQUIRED   = 4
-       EXCLUSION  = 3
-       EXCEPTION  = 1
-       TOTAL      = 8
+       ConditionResult 的数量、
+       REQUIRED / EXCLUSION / EXCEPTION 分类数量，
+       均由当前 Runtime Rule 决定。
+
+       Builder 不固定假设 Article 14 有 8 个条件。
 
 12. Builder 不允许通过“补条件”的方式修改 DecisionResult。
 
@@ -77,25 +78,40 @@ V6.0-14 核心原则
 
 
 ============================================================
-V6.0-14 ConditionResult 结构
+V6.2 ConditionResult 结构
 ============================================================
 
-REQUIRED:
+ConditionResult 的完整结构由当前 Runtime Rule 决定。
 
-    1. 连续订立二次固定期限劳动合同
-    2. 存在后续订立的劳动合同
-    3. 续订劳动合同
-    4. 劳动者提出或者同意续订、订立劳动合同
+Runtime Rule 提供：
 
-EXCLUSION:
+    conditions
+        ↓
+    REQUIRED 条件
 
-    5. 劳动者存在《劳动合同法》第三十九条规定的情形
-    6. 劳动者存在《劳动合同法》第四十条第一项规定的情形
-    7. 劳动者存在《劳动合同法》第四十条第二项规定的情形
+    exclusion_conditions
+        ↓
+    EXCLUSION 条件
 
-EXCEPTION:
+    exceptions
+        ↓
+    EXCEPTION 条件
 
-    8. 劳动者提出订立固定期限劳动合同
+Builder 必须：
+
+    1. 原样读取 DecisionResult.condition_results。
+    2. 按 Runtime Rule 验证 ConditionResult 结构。
+    3. 保留所有 ConditionResult。
+    4. 保留每个 ConditionResult 的原始状态。
+    5. 不根据 Article 14 的固定条件数量推导结构。
+
+Builder 不得：
+
+    1. 固定假设 ConditionResult 数量。
+    2. 自动补充缺失条件。
+    3. 删除多余条件。
+    4. 修改 ConditionResult 的状态。
+    5. 将 UNKNOWN 转换为 SATISFIED 或 NOT_SATISFIED。
 
 
 ============================================================
@@ -139,8 +155,6 @@ from src.legal_constants import (
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
 
-from src.legal_rule_definition import RULE_ID
-from src.legal_rule_registry import get_rule
 
 
 # ============================================================
@@ -185,25 +199,122 @@ BUILDER_VERSION = "V6.1"
 # 但不再形成第二套法律规则定义。
 # ============================================================
 
-_CANONICAL_RULE = get_rule(RULE_ID)
+def _get_runtime_expected_conditions(
+    decision: Any,
+) -> Dict[str, Any]:
+    """
+    从当前 DecisionResult 的 Runtime Rule 获取期望条件结构。
 
-EXPECTED_REQUIRED_CONDITIONS = list(
-    _CANONICAL_RULE["conditions"]
-)
+    V6.2：
+        Builder 不再固定使用 RULE_ID / Article 14
+        作为 ConditionResult 的结构来源。
 
-EXPECTED_EXCLUSION_CONDITIONS = list(
-    _CANONICAL_RULE["exclusion_conditions"]
-)
+    数据流：
 
-EXPECTED_EXCEPTION_CONDITIONS = list(
-    _CANONICAL_RULE["exceptions"]
-)
+        DecisionResult
+            ↓
+        selected_rule
+            ↓
+        Runtime Rule
+            ↓
+        conditions
+        exclusion_conditions
+        exceptions
 
-EXPECTED_TOTAL_CONDITIONS = (
-    len(EXPECTED_REQUIRED_CONDITIONS)
-    + len(EXPECTED_EXCLUSION_CONDITIONS)
-    + len(EXPECTED_EXCEPTION_CONDITIONS)
-)
+    Builder 只消费 Engine 已经选择的 Runtime Rule，
+    不自行选择 Rule，不重新执行法律推理。
+    """
+
+    selected_rule = get_value(
+        decision,
+        "selected_rule",
+        None,
+    )
+
+    if not isinstance(selected_rule, dict):
+        raise ValueError(
+            "DecisionResult.selected_rule 必须是 Runtime Rule dict。"
+        )
+
+    required_conditions = selected_rule.get(
+        "conditions",
+        [],
+    )
+
+    exclusion_conditions = selected_rule.get(
+        "exclusion_conditions",
+        [],
+    )
+
+    exception_conditions = selected_rule.get(
+        "exceptions",
+        [],
+    )
+
+    if not isinstance(
+        required_conditions,
+        list,
+    ):
+        raise ValueError(
+            "Runtime Rule.conditions 必须是 list。"
+        )
+
+    if not isinstance(
+        exclusion_conditions,
+        list,
+    ):
+        raise ValueError(
+            "Runtime Rule.exclusion_conditions 必须是 list。"
+        )
+
+    if not isinstance(
+        exception_conditions,
+        list,
+    ):
+        raise ValueError(
+            "Runtime Rule.exceptions 必须是 list。"
+        )
+
+    return {
+        "required": list(
+            required_conditions
+        ),
+        "exclusion": list(
+            exclusion_conditions
+        ),
+        "exception": list(
+            exception_conditions
+        ),
+        "total": (
+            len(required_conditions)
+            + len(exclusion_conditions)
+            + len(exception_conditions)
+        ),
+    }
+
+
+def _get_expected_condition_sets(
+    decision: Any,
+) -> Dict[str, Any]:
+    """
+    V6.2 兼容适配：
+
+    将 Runtime Rule 的条件结构转换为
+    Builder 当前验证逻辑所使用的 EXPECTED_* 语义。
+
+    不产生任何法律条件。
+    """
+
+    expected = _get_runtime_expected_conditions(
+        decision
+    )
+
+    return {
+        "required": expected["required"],
+        "exclusion": expected["exclusion"],
+        "exception": expected["exception"],
+        "total": expected["total"],
+    }
 
 
 # ============================================================
@@ -670,8 +781,8 @@ def _get_condition_results(
 
     这里绝不追加、删除或者修改 ConditionResult。
 
-    如果 Decision Engine 给出 8 个，
-    Builder 就读取 8 个。
+    如果 Decision Engine 给出 Runtime Rule 定义数量的
+    ConditionResult，Builder 就原样读取。
 
     如果数量不正确，
     应该报告结构错误，而不是偷偷修复。
@@ -1031,12 +1142,12 @@ def validate_condition_structure(
     """
     验证 ConditionResult 结构。
 
-    V6.0-14 正常情况下必须：
+    V6.2 正常情况下必须：
 
-        REQUIRED   = 4
-        EXCLUSION  = 3
-        EXCEPTION  = 1
-        TOTAL      = 8
+        ConditionResult 结构与当前 Runtime Rule 完全一致。
+
+        REQUIRED / EXCLUSION / EXCEPTION
+        的数量由 Runtime Rule 动态决定。
 
     strict=True：
 
@@ -1051,6 +1162,26 @@ def validate_condition_structure(
 
     Builder 不会通过补条件的方式修复结构。
     """
+
+    expected = _get_expected_condition_sets(
+        decision
+    )
+
+    expected_required_conditions = expected[
+        "required"
+    ]
+
+    expected_exclusion_conditions = expected[
+        "exclusion"
+    ]
+
+    expected_exception_conditions = expected[
+        "exception"
+    ]
+
+    expected_total_conditions = expected[
+        "total"
+    ]
 
     condition_results = _get_condition_results(
         decision
@@ -1136,19 +1267,19 @@ def validate_condition_structure(
 
     missing_required = [
         item
-        for item in EXPECTED_REQUIRED_CONDITIONS
+        for item in expected_required_conditions
         if item not in actual_required_names
     ]
 
     missing_exclusion = [
         item
-        for item in EXPECTED_EXCLUSION_CONDITIONS
+        for item in expected_exclusion_conditions
         if item not in actual_exclusion_names
     ]
 
     missing_exception = [
         item
-        for item in EXPECTED_EXCEPTION_CONDITIONS
+        for item in expected_exception_conditions
         if item not in actual_exception_names
     ]
 
@@ -1157,9 +1288,9 @@ def validate_condition_structure(
         for name in all_names
         if name
         and name not in (
-            EXPECTED_REQUIRED_CONDITIONS
-            + EXPECTED_EXCLUSION_CONDITIONS
-            + EXPECTED_EXCEPTION_CONDITIONS
+            expected_required_conditions
+            + expected_exclusion_conditions
+            + expected_exception_conditions
         )
     ]
 
@@ -1183,21 +1314,21 @@ def validate_condition_structure(
         ),
 
         "expected_total":
-            EXPECTED_TOTAL_CONDITIONS,
+            expected_total_conditions,
 
         "expected_required":
             len(
-                EXPECTED_REQUIRED_CONDITIONS
+                expected_required_conditions
             ),
 
         "expected_exclusion":
             len(
-                EXPECTED_EXCLUSION_CONDITIONS
+                expected_exclusion_conditions
             ),
 
         "expected_exception":
             len(
-                EXPECTED_EXCEPTION_CONDITIONS
+                expected_exception_conditions
             ),
 
         "unknown_types":
@@ -1229,45 +1360,45 @@ def validate_condition_structure(
 
     if (
         result["total"]
-        != EXPECTED_TOTAL_CONDITIONS
+        != expected_total_conditions
     ):
         errors.append(
             "ConditionResult 总数错误："
             f"{result['total']} != "
-            f"{EXPECTED_TOTAL_CONDITIONS}"
+            f"{expected_total_conditions}"
         )
 
     if (
         result["required"]
         != len(
-            EXPECTED_REQUIRED_CONDITIONS
+            expected_required_conditions
         )
     ):
         errors.append(
             "REQUIRED 数量错误："
-            f"{result['required']} != {len(EXPECTED_REQUIRED_CONDITIONS)}"
+            f"{result['required']} != {len(expected_required_conditions)}"
         )
 
     if (
         result["exclusion"]
         != len(
-            EXPECTED_EXCLUSION_CONDITIONS
+            expected_exclusion_conditions
         )
     ):
         errors.append(
             "EXCLUSION 数量错误："
-            f"{result['exclusion']} != {len(EXPECTED_EXCLUSION_CONDITIONS)}"
+            f"{result['exclusion']} != {len(expected_exclusion_conditions)}"
         )
 
     if (
         result["exception"]
         != len(
-            EXPECTED_EXCEPTION_CONDITIONS
+            expected_exception_conditions
         )
     ):
         errors.append(
             "EXCEPTION 数量错误："
-            f"{result['exception']} != {len(EXPECTED_EXCEPTION_CONDITIONS)}"
+            f"{result['exception']} != {len(expected_exception_conditions)}"
         )
 
     if result["unknown_types"]:

@@ -279,25 +279,116 @@ def validate_decision_consistency(
     return True
 
 
+def _get_runtime_condition_expectations(
+    decision: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    从当前 Decision 的 Runtime Rule 获取 Condition 结构期望值。
+
+    V6.2：
+        Validator 不再固定假设 Article 14
+        必须存在 4 REQUIRED + 3 EXCLUSION + 1 EXCEPTION。
+
+    数据来源：
+
+        decision["selected_rule"]
+            ↓
+        Runtime Rule
+            ↓
+        conditions
+        exclusion_conditions
+        exceptions
+
+    注意：
+        不根据实际 ConditionResult 数量推导期望数量。
+        期望结构必须来自 Runtime Rule。
+    """
+
+    if not isinstance(decision, dict):
+        return {}
+
+    selected_rule = decision.get(
+        "selected_rule",
+        None,
+    )
+
+    if not isinstance(selected_rule, dict):
+        return {}
+
+    required_conditions = selected_rule.get(
+        "conditions",
+        [],
+    )
+
+    exclusion_conditions = selected_rule.get(
+        "exclusion_conditions",
+        [],
+    )
+
+    exception_conditions = selected_rule.get(
+        "exceptions",
+        [],
+    )
+
+    if not isinstance(
+        required_conditions,
+        list,
+    ):
+        return {}
+
+    if not isinstance(
+        exclusion_conditions,
+        list,
+    ):
+        return {}
+
+    if not isinstance(
+        exception_conditions,
+        list,
+    ):
+        return {}
+
+    return {
+        "required": len(required_conditions),
+        "exclusion": len(exclusion_conditions),
+        "exception": len(exception_conditions),
+        "total": (
+            len(required_conditions)
+            + len(exclusion_conditions)
+            + len(exception_conditions)
+        ),
+    }
+
+
 def validate_engine_condition_completeness(
     decision: Dict[str, Any],
 ) -> bool:
     """
-    V6.0-27：验证 Decision Engine V6.0-14 的 ConditionResult 完整性。
+    V6.2：验证 Decision Engine 的 ConditionResult 完整性。
 
-    正常结构固定为：
+    ConditionResult 的期望数量来自当前 Runtime Rule。
 
-        REQUIRED   = 4
-        EXCLUSION  = 3
-        EXCEPTION  = 1
-        TOTAL      = 8
+    CONDITIONAL：
+        必须包含 Runtime Rule 定义的全部 ConditionResult。
 
-    CONDITIONAL 情况下如果不是完整 8 条，必须进入安全 Fallback，
-    RAG 不得自行补条件。
+    非 CONDITIONAL：
+        允许没有 ConditionResult，
+        或包含 Runtime Rule 定义的完整 ConditionResult。
+
+    Validator 不补充 ConditionResult。
     """
 
     if not isinstance(decision, dict):
         return False
+
+    expectations = _get_runtime_condition_expectations(
+        decision
+    )
+
+    if not expectations:
+        return False
+
+    expected_total = expectations["total"]
 
     engine_decision = normalize_text(
         decision.get("engine_decision", "")
@@ -309,7 +400,10 @@ def validate_engine_condition_completeness(
     )
 
     if not isinstance(count, int):
-        raw_decision = decision.get("raw_decision")
+        raw_decision = decision.get(
+            "raw_decision"
+        )
+
         count = len(
             ensure_list(
                 get_field(
@@ -321,34 +415,51 @@ def validate_engine_condition_completeness(
         )
 
     if engine_decision == CONDITIONAL:
-        return count == 8
+        return count == expected_total
 
-    return count == 0 or count == 8
+    return count == 0 or count == expected_total
 
 
 def validate_condition_categories(
     decision: Dict[str, Any],
 ) -> bool:
     """
-    V6.0-27：严格验证 Engine V6.0-14 的三类 ConditionResult。
+    V6.2：严格验证当前 Runtime Rule 的三类 ConditionResult。
 
-        REQUIRED   = 4
-        EXCLUSION  = 3
-        EXCEPTION  = 1
-        TOTAL      = 8
+    期望数量来自：
 
-    分类直接来自 ConditionResult.condition_type / type，
-    不再从 Rules 猜测类别。
+        decision["selected_rule"]
+            ↓
+        Runtime Rule
+
+    分类实际来源：
+
+        ConditionResult.condition_type
+        / category
+        / type
+
+    Validator 不根据 Condition 名称猜测类别，
+    也不根据实际结果数量推导期望数量。
     """
 
     if not isinstance(decision, dict):
         return False
 
-    results = ensure_list(
-        decision.get("condition_results", [])
+    expectations = _get_runtime_condition_expectations(
+        decision
     )
 
-    if len(results) != 8:
+    if not expectations:
+        return False
+
+    results = ensure_list(
+        decision.get(
+            "condition_results",
+            [],
+        )
+    )
+
+    if len(results) != expectations["total"]:
         return False
 
     counts = {
@@ -366,9 +477,11 @@ def validate_condition_categories(
         condition = normalize_text(
             item.get("condition", "")
         )
+
         status = normalize_text(
             item.get("status", "")
         ).upper()
+
         category = normalize_text(
             item.get(
                 "condition_type",
@@ -399,9 +512,9 @@ def validate_condition_categories(
         counts[category] += 1
 
     return counts == {
-        REQUIRED: 4,
-        EXCLUSION: 3,
-        EXCEPTION: 1,
+        REQUIRED: expectations["required"],
+        EXCLUSION: expectations["exclusion"],
+        EXCEPTION: expectations["exception"],
     }
 
 

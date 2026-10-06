@@ -369,14 +369,6 @@ def build_fact_condition_mappings(
 
     canonical_rule = get_rule(RULE_ID)
 
-    canonical_conditions = canonical_rule["conditions"]
-    canonical_exclusion_conditions = (
-        canonical_rule["exclusion_conditions"]
-    )
-    canonical_exception_conditions = (
-        canonical_rule["exceptions"]
-    )
-
     # ========================================================
     # V6.2：使用 Stable Condition ID 建立语义条件别名
     #
