@@ -628,7 +628,6 @@ def build_fallback_answer(
 
         if status in {
             "NOT_SATISFIED",
-            "UNSATISFIED",
         }:
             required_not_satisfied.append(
                 condition
@@ -755,7 +754,6 @@ def build_fallback_answer(
 
         if status in {
             "NOT_SATISFIED",
-            "UNSATISFIED",
         }:
 
             untriggered_exclusions.append(
@@ -864,7 +862,6 @@ def build_fallback_answer(
 
         if status in {
             "NOT_SATISFIED",
-            "UNSATISFIED",
         }:
 
             untriggered_exceptions.append(
@@ -1380,21 +1377,18 @@ def build_fallback_answer(
             "REQUIRED": {
                 "SATISFIED": "已满足",
                 "NOT_SATISFIED": "未满足",
-                "UNSATISFIED": "未满足",
                 "UNKNOWN": "尚未确认",
             },
 
             "EXCLUSION": {
                 "SATISFIED": "已触发",
                 "NOT_SATISFIED": "未触发",
-                "UNSATISFIED": "未触发",
                 "UNKNOWN": "尚未确认",
             },
 
             "EXCEPTION": {
                 "SATISFIED": "已触发",
                 "NOT_SATISFIED": "未触发",
-                "UNSATISFIED": "未触发",
                 "UNKNOWN": "尚未确认",
             },
         }

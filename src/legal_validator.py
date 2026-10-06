@@ -389,7 +389,6 @@ def validate_condition_categories(
             SATISFIED,
             NOT_SATISFIED,
             UNKNOWN,
-            "UNSATISFIED",
         }:
             return False
 

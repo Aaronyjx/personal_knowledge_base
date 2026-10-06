@@ -77,7 +77,6 @@ from typing import Any, Dict, List
 # ============================================================
 
 
-ANSWER_UNSATISFIED = "UNSATISFIED"
 
 
 
@@ -416,7 +415,6 @@ def build_deterministic_conclusion(
 
             elif status in {
                 "NOT_SATISFIED",
-                "UNSATISFIED",
             }:
 
                 required_not_satisfied.append(
