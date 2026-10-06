@@ -336,8 +336,9 @@ def build_ollama_prompt(
     6. Ollama 不得把 UNKNOWN 推断为 NOT_SATISFIED。
     7. Ollama 不得把 SATISFIED 改写成 UNKNOWN。
     8. Ollama 不得把 NOT_SATISFIED 改写成 UNKNOWN。
-    9. EXCLUSION / EXCEPTION 中的 NOT_SATISFIED
+    9. EXCLUSION / EXCEPTION 中的 SATISFIED
        表示该排除条件 / 例外条件已经触发。
+       NOT_SATISFIED 表示该排除条件 / 例外条件未触发。
     10. 最终回答必须保持 Engine Decision 不变。
     11. 法律条文中的列举事项不得自动转换为本案事实。
     12. Engine 只确认概括性事实时，Ollama 必须保持概括性表达。
@@ -409,8 +410,8 @@ def build_ollama_prompt(
         "NOT_ESTABLISHED 不等于“所有 REQUIRED 条件都不满足”。\n"
         "它可能由以下任一情况造成：\n"
         "1. REQUIRED 条件存在 NOT_SATISFIED；\n"
-        "2. EXCLUSION 条件存在 NOT_SATISFIED，即排除条件已经触发；\n"
-        "3. EXCEPTION 条件存在 NOT_SATISFIED，即例外条件已经触发。\n"
+        "2. EXCLUSION 条件存在 SATISFIED，即排除条件已经触发；\n"
+        "3. EXCEPTION 条件存在 SATISFIED，即例外条件已经触发。\n"
         "\n"
         "因此，生成 NOT_ESTABLISHED 回答时，必须准确指出 Engine 已确认的实际原因，"
         "不得笼统表述为“所有条件均不满足”。\n"
@@ -1600,7 +1601,7 @@ def build_ollama_prompt(
         "\n"
         "【结论】：\n"
         "只表达 Engine Decision 及其已经确认的直接原因。\n"
-        "如果存在 EXCLUSION + NOT_SATISFIED，"
+        "如果存在 EXCLUSION + SATISFIED，"
         "必须明确说明该排除条件已经触发。\n"
         "不得加入反事实、假设或用户未提供的具体情形。\n"
         "\n"
@@ -1706,7 +1707,8 @@ def build_ollama_prompt(
         "不得自行举例。\n"
         "不得创造反事实。\n"
         "不得改变 SATISFIED / NOT_SATISFIED / UNKNOWN 的状态。\n"
-        "EXCLUSION / EXCEPTION 的 NOT_SATISFIED 表示已经触发。\n"
+        "EXCLUSION / EXCEPTION 的 SATISFIED 表示已经触发。\n"
+        "EXCLUSION / EXCEPTION 的 NOT_SATISFIED 表示未触发。\n"
         "【需要注意】只能写 UNKNOWN。\n"
         "法律条文中的具体列举事项不得自动成为本案事实。\n"
         "\n"

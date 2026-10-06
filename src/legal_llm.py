@@ -90,8 +90,9 @@ Common Utils 已独立拆分至：
 
 8. Ollama 不得把 NOT_SATISFIED 改写成 UNKNOWN。
 
-9. EXCLUSION / EXCEPTION 中的 NOT_SATISFIED
+9. EXCLUSION / EXCEPTION 中的 SATISFIED
    表示该排除条件 / 例外条件已经触发。
+   NOT_SATISFIED 表示该排除条件 / 例外条件未触发。
 
 10. 最终法律结论必须保持 Engine Decision 不变。
 

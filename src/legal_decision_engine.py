@@ -80,11 +80,11 @@ V6.0-16 / V6.1 第一阶段核心原则
 10. REQUIRED 条件存在 NOT_SATISFIED：
        → NOT_ESTABLISHED
 
-11. EXCLUSION 条件存在 NOT_SATISFIED：
+11. EXCLUSION 条件存在 SATISFIED：
        → 表示排除条件已经触发
        → NOT_ESTABLISHED
 
-12. EXCEPTION 条件存在 NOT_SATISFIED：
+12. EXCEPTION 条件存在 SATISFIED：
        → 表示例外已经触发
        → NOT_ESTABLISHED
 

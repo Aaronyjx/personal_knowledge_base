@@ -1175,7 +1175,7 @@ def case_05_satisfied_cannot_become_unknown() -> None:
 
 # ============================================================
 # CASE 06
-# EXCLUSION NOT_SATISFIED 必须保持“已触发”
+# EXCLUSION SATISFIED 必须保持“已触发”
 # ============================================================
 
 def case_06_exclusion_semantics_preserved() -> None:
@@ -1183,7 +1183,7 @@ def case_06_exclusion_semantics_preserved() -> None:
     print()
     print("=" * 70)
     print(
-        "CASE 06: EXCLUSION NOT_SATISFIED 语义必须保持"
+        "CASE 06: EXCLUSION SATISFIED 语义必须保持"
     )
     print("=" * 70)
 
@@ -1208,9 +1208,61 @@ def case_06_exclusion_semantics_preserved() -> None:
         )
     )
 
+    condition_results = validation_decision[
+        "condition_results"
+    ]
+
+    article_39_definition = next(
+        (
+            item
+            for item in _CANONICAL_RULE.get(
+                "condition_definitions",
+                [],
+            )
+            if (
+                item.get("condition_type") == EXCLUSION
+                and item.get("condition") == ARTICLE_39_FACT
+            )
+        ),
+        None,
+    )
+
     assert_true(
-        "NOT_SATISFIED" in deterministic_state,
-        "Deterministic State 必须保留 NOT_SATISFIED",
+        article_39_definition is not None,
+        "Canonical Rule 中必须存在 Article 39 EXCLUSION ConditionDefinition",
+    )
+
+    article_39_condition_id = article_39_definition.get(
+        "condition_id"
+    )
+
+    assert_true(
+        bool(article_39_condition_id),
+        "Article 39 EXCLUSION 必须存在 canonical condition_id",
+    )
+
+    article_39_result = next(
+        (
+            item
+            for item in condition_results
+            if item.get("condition_id") == article_39_condition_id
+        ),
+        None,
+    )
+
+    assert_true(
+        article_39_result is not None,
+        "必须存在 Article 39 EXCLUSION ConditionResult",
+    )
+
+    assert_true(
+        article_39_result.get("condition_type") == EXCLUSION,
+        "Article 39 必须属于 EXCLUSION",
+    )
+
+    assert_true(
+        article_39_result.get("status") == SATISFIED,
+        "Article 39 EXCLUSION 必须为 SATISFIED",
     )
 
     assert_true(
