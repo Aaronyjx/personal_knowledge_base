@@ -1204,9 +1204,9 @@ def match_condition(
     condition_id: str,
     condition: str,
     condition_type: str,
-    relationships: Optional[
-        List[Dict[str, Any]]
-    ] = None,
+    relationships: List[
+        Dict[str, Any]
+    ],
 ) -> ConditionResult:
     """
     对单项法律条件进行判断。
@@ -1231,14 +1231,12 @@ def match_condition(
 
     提供。
 
-    为保持现有调用兼容性：
+    relationships 必须由上游 Runtime Rule
+    显式传入。
 
-        relationships
-
-    参数允许为空。
-
-    如果为空，则通过 Canonical Registry
-    取得当前 Rule 的 Relationships。
+    本函数不负责 Rule Selection，
+    也不负责从 Canonical Registry
+    获取法律关系。
 
     注意：
 
@@ -1248,29 +1246,6 @@ def match_condition(
         上下文或者自然语言推测，
         自动升级为 SATISFIED。
     """
-
-    if relationships is None:
-
-        from src.legal_rule_registry import (
-            get_rule,
-        )
-
-        # 当前系统只有 Article 14 核心 Rule。
-        # 通过 Registry 获取 Canonical Rule，
-        # 不重新定义法律条件。
-        #
-        # 后续多 Rule 执行框架完成后，
-        # 可由上游统一传入 relationships，
-        # 消除这里的兼容性 fallback。
-
-        canonical_rule = get_rule(
-            "RULE-001"
-        )
-
-        relationships = canonical_rule.get(
-            "fact_condition_relationships",
-            [],
-        )
 
     if not isinstance(
         relationships,

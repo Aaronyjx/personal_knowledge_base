@@ -41,6 +41,7 @@ from src.legal_rule_definition import RULE_ID
 RULE = get_rule(RULE_ID)
 
 CONDITION_DEFINITIONS = RULE["condition_definitions"]
+FACT_CONDITION_RELATIONSHIPS = RULE["fact_condition_relationships"]
 
 CONDITIONS = {
     item["condition_id"]: item
@@ -116,6 +117,7 @@ def evaluate(condition_id, facts):
         condition_id=condition_id,
         condition=definition["condition"],
         condition_type=definition["condition_type"],
+        relationships=FACT_CONDITION_RELATIONSHIPS,
     )
 
     return result
