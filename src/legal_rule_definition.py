@@ -353,6 +353,798 @@ ARTICLE_14_REFERENCES = [
 
 
 # ============================================================
+# V7 Fact → Condition Relationship Definition
+# ============================================================
+#
+# 本层定义：
+#
+#     LegalFacts
+#          ↓
+#       Predicate
+#          ↓
+#       Condition
+#          ↓
+#        Status
+#
+# 本函数只定义 Canonical Legal Knowledge，
+# 不读取用户事实，不执行事实匹配。
+#
+# Predicate operator 冻结为：
+#
+#     ==
+#     >=
+#
+# 多个 predicate_groups 表示 OR。
+#
+# 一个 group 内的 predicates 使用 AND。
+#
+# None 不作为 Predicate。
+#
+# 事实缺失由 Decision Engine 解释为 UNKNOWN。
+# ============================================================
+
+def build_article_14_fact_condition_relationships() -> list[Dict[str, Any]]:
+    """
+    构建 Article 14 的 Canonical Fact → Condition Relationships。
+
+    本函数只定义法律规则关系，不执行事实判断。
+    """
+
+    return [
+
+        # ====================================================
+        # REQUIRED-001
+        #
+        # 连续订立二次固定期限劳动合同
+        #
+        # count >= 2
+        # term_type == fixed
+        # continuous == True
+        # ====================================================
+
+        {
+            "relationship_id": (
+                "ARTICLE-14-REL-REQUIRED-001-001"
+            ),
+            "condition_id": (
+                "ARTICLE-14-REQUIRED-001"
+            ),
+            "predicate_groups": [
+                {
+                    "match": "ALL",
+                    "predicates": [
+                        {
+                            "fact_key": (
+                                "contract_sequence.count"
+                            ),
+                            "operator": ">=",
+                            "value": 2,
+                        },
+                        {
+                            "fact_key": (
+                                "contract_sequence.term_type"
+                            ),
+                            "operator": "==",
+                            "value": "fixed",
+                        },
+                        {
+                            "fact_key": (
+                                "contract_sequence.continuous"
+                            ),
+                            "operator": "==",
+                            "value": True,
+                        },
+                    ],
+                },
+            ],
+            "relationship_type": "PROVES_TRUE",
+            "result_status": "SATISFIED",
+            "reason": (
+                "连续固定期限劳动合同数量达到二次"
+                "且合同连续时，可以证明该 REQUIRED 条件。"
+            ),
+        },
+
+        # ====================================================
+        # REQUIRED-002
+        #
+        # 存在后续订立的劳动合同
+        #
+        # Group 1：
+        #     count >= 3
+        #     term_type == fixed
+        #
+        # OR
+        #
+        # Group 2：
+        #     completed_renewal == True
+        # ====================================================
+
+        {
+            "relationship_id": (
+                "ARTICLE-14-REL-REQUIRED-002-001"
+            ),
+            "condition_id": (
+                "ARTICLE-14-REQUIRED-002"
+            ),
+            "predicate_groups": [
+                {
+                    "match": "ALL",
+                    "predicates": [
+                        {
+                            "fact_key": (
+                                "contract_sequence.count"
+                            ),
+                            "operator": ">=",
+                            "value": 3,
+                        },
+                        {
+                            "fact_key": (
+                                "contract_sequence.term_type"
+                            ),
+                            "operator": "==",
+                            "value": "fixed",
+                        },
+                    ],
+                },
+                {
+                    "match": "ALL",
+                    "predicates": [
+                        {
+                            "fact_key": (
+                                "completed_renewal"
+                            ),
+                            "operator": "==",
+                            "value": True,
+                        },
+                    ],
+                },
+            ],
+            "relationship_type": "PROVES_TRUE",
+            "result_status": "SATISFIED",
+            "reason": (
+                "连续固定期限劳动合同达到三次，"
+                "或者已经明确完成续订时，"
+                "可以证明存在后续订立的劳动合同。"
+            ),
+        },
+
+        # ====================================================
+        # REQUIRED-003
+        #
+        # 续订劳动合同
+        # ====================================================
+
+        {
+            "relationship_id": (
+                "ARTICLE-14-REL-REQUIRED-003-001"
+            ),
+            "condition_id": (
+                "ARTICLE-14-REQUIRED-003"
+            ),
+            "predicate_groups": [
+                {
+                    "match": "ALL",
+                    "predicates": [
+                        {
+                            "fact_key": (
+                                "completed_renewal"
+                            ),
+                            "operator": "==",
+                            "value": True,
+                        },
+                    ],
+                },
+            ],
+            "relationship_type": "PROVES_TRUE",
+            "result_status": "SATISFIED",
+            "reason": (
+                "明确完成续订可以证明已经续订劳动合同。"
+            ),
+        },
+
+        {
+            "relationship_id": (
+                "ARTICLE-14-REL-REQUIRED-003-002"
+            ),
+            "condition_id": (
+                "ARTICLE-14-REQUIRED-003"
+            ),
+            "predicate_groups": [
+                {
+                    "match": "ALL",
+                    "predicates": [
+                        {
+                            "fact_key": (
+                                "contract_sequence.count"
+                            ),
+                            "operator": ">=",
+                            "value": 3,
+                        },
+                    ],
+                },
+            ],
+            "relationship_type": "DOES_NOT_PROVE",
+            "result_status": "UNKNOWN",
+            "reason": (
+                "合同数量达到三次本身不能证明"
+                "已经完成续订劳动合同。"
+            ),
+        },
+
+        # ====================================================
+        # REQUIRED-004
+        #
+        # 劳动者提出或者同意续订、订立劳动合同
+        # ====================================================
+
+        {
+            "relationship_id": (
+                "ARTICLE-14-REL-REQUIRED-004-001"
+            ),
+            "condition_id": (
+                "ARTICLE-14-REQUIRED-004"
+            ),
+            "predicate_groups": [
+                {
+                    "match": "ALL",
+                    "predicates": [
+                        {
+                            "fact_key": (
+                                "worker_agreement"
+                            ),
+                            "operator": "==",
+                            "value": True,
+                        },
+                    ],
+                },
+            ],
+            "relationship_type": "PROVES_TRUE",
+            "result_status": "SATISFIED",
+            "reason": (
+                "明确记录劳动者提出或者同意续订、"
+                "订立劳动合同时，可以证明该 REQUIRED 条件。"
+            ),
+        },
+
+        {
+            "relationship_id": (
+                "ARTICLE-14-REL-REQUIRED-004-002"
+            ),
+            "condition_id": (
+                "ARTICLE-14-REQUIRED-004"
+            ),
+            "predicate_groups": [
+                {
+                    "match": "ALL",
+                    "predicates": [
+                        {
+                            "fact_key": (
+                                "contract_sequence.count"
+                            ),
+                            "operator": ">=",
+                            "value": 2,
+                        },
+                    ],
+                },
+            ],
+            "relationship_type": "DOES_NOT_PROVE",
+            "result_status": "UNKNOWN",
+            "reason": (
+                "合同数量达到二次本身不能证明"
+                "劳动者已经提出或者同意续订、订立劳动合同。"
+            ),
+        },
+
+        # ====================================================
+        # EXCLUSION-001
+        # ====================================================
+
+        {
+            "relationship_id": (
+                "ARTICLE-14-REL-EXCLUSION-001-001"
+            ),
+            "condition_id": (
+                "ARTICLE-14-EXCLUSION-001"
+            ),
+            "predicate_groups": [
+                {
+                    "match": "ALL",
+                    "predicates": [
+                        {
+                            "fact_key": "article_39",
+                            "operator": "==",
+                            "value": True,
+                        },
+                    ],
+                },
+            ],
+            "relationship_type": "PROVES_TRUE",
+            "result_status": "SATISFIED",
+            "reason": (
+                "明确存在《劳动合同法》第三十九条规定情形时，"
+                "该 EXCLUSION 条件成立。"
+            ),
+        },
+
+        {
+            "relationship_id": (
+                "ARTICLE-14-REL-EXCLUSION-001-002"
+            ),
+            "condition_id": (
+                "ARTICLE-14-EXCLUSION-001"
+            ),
+            "predicate_groups": [
+                {
+                    "match": "ALL",
+                    "predicates": [
+                        {
+                            "fact_key": "article_39",
+                            "operator": "==",
+                            "value": False,
+                        },
+                    ],
+                },
+            ],
+            "relationship_type": "PROVES_FALSE",
+            "result_status": "NOT_SATISFIED",
+            "reason": (
+                "明确不存在《劳动合同法》第三十九条规定情形时，"
+                "该 EXCLUSION 条件不成立。"
+            ),
+        },
+
+        # ====================================================
+        # EXCLUSION-002
+        # ====================================================
+
+        {
+            "relationship_id": (
+                "ARTICLE-14-REL-EXCLUSION-002-001"
+            ),
+            "condition_id": (
+                "ARTICLE-14-EXCLUSION-002"
+            ),
+            "predicate_groups": [
+                {
+                    "match": "ALL",
+                    "predicates": [
+                        {
+                            "fact_key": "article_40_1",
+                            "operator": "==",
+                            "value": True,
+                        },
+                    ],
+                },
+            ],
+            "relationship_type": "PROVES_TRUE",
+            "result_status": "SATISFIED",
+            "reason": (
+                "明确存在《劳动合同法》第四十条第一项规定情形时，"
+                "该 EXCLUSION 条件成立。"
+            ),
+        },
+
+        {
+            "relationship_id": (
+                "ARTICLE-14-REL-EXCLUSION-002-002"
+            ),
+            "condition_id": (
+                "ARTICLE-14-EXCLUSION-002"
+            ),
+            "predicate_groups": [
+                {
+                    "match": "ALL",
+                    "predicates": [
+                        {
+                            "fact_key": "article_40_1",
+                            "operator": "==",
+                            "value": False,
+                        },
+                    ],
+                },
+            ],
+            "relationship_type": "PROVES_FALSE",
+            "result_status": "NOT_SATISFIED",
+            "reason": (
+                "明确不存在《劳动合同法》第四十条第一项规定情形时，"
+                "该 EXCLUSION 条件不成立。"
+            ),
+        },
+
+        # ====================================================
+        # EXCLUSION-003
+        # ====================================================
+
+        {
+            "relationship_id": (
+                "ARTICLE-14-REL-EXCLUSION-003-001"
+            ),
+            "condition_id": (
+                "ARTICLE-14-EXCLUSION-003"
+            ),
+            "predicate_groups": [
+                {
+                    "match": "ALL",
+                    "predicates": [
+                        {
+                            "fact_key": "article_40_2",
+                            "operator": "==",
+                            "value": True,
+                        },
+                    ],
+                },
+            ],
+            "relationship_type": "PROVES_TRUE",
+            "result_status": "SATISFIED",
+            "reason": (
+                "明确存在《劳动合同法》第四十条第二项规定情形时，"
+                "该 EXCLUSION 条件成立。"
+            ),
+        },
+
+        {
+            "relationship_id": (
+                "ARTICLE-14-REL-EXCLUSION-003-002"
+            ),
+            "condition_id": (
+                "ARTICLE-14-EXCLUSION-003"
+            ),
+            "predicate_groups": [
+                {
+                    "match": "ALL",
+                    "predicates": [
+                        {
+                            "fact_key": "article_40_2",
+                            "operator": "==",
+                            "value": False,
+                        },
+                    ],
+                },
+            ],
+            "relationship_type": "PROVES_FALSE",
+            "result_status": "NOT_SATISFIED",
+            "reason": (
+                "明确不存在《劳动合同法》第四十条第二项规定情形时，"
+                "该 EXCLUSION 条件不成立。"
+            ),
+        },
+
+        # ====================================================
+        # EXCEPTION-001
+        # ====================================================
+
+        {
+            "relationship_id": (
+                "ARTICLE-14-REL-EXCEPTION-001-001"
+            ),
+            "condition_id": (
+                "ARTICLE-14-EXCEPTION-001"
+            ),
+            "predicate_groups": [
+                {
+                    "match": "ALL",
+                    "predicates": [
+                        {
+                            "fact_key": (
+                                "fixed_term_exception"
+                            ),
+                            "operator": "==",
+                            "value": True,
+                        },
+                    ],
+                },
+            ],
+            "relationship_type": "PROVES_TRUE",
+            "result_status": "SATISFIED",
+            "reason": (
+                "明确劳动者提出订立固定期限劳动合同时，"
+                "该 EXCEPTION 条件成立。"
+            ),
+        },
+
+        {
+            "relationship_id": (
+                "ARTICLE-14-REL-EXCEPTION-001-002"
+            ),
+            "condition_id": (
+                "ARTICLE-14-EXCEPTION-001"
+            ),
+            "predicate_groups": [
+                {
+                    "match": "ALL",
+                    "predicates": [
+                        {
+                            "fact_key": (
+                                "fixed_term_exception"
+                            ),
+                            "operator": "==",
+                            "value": False,
+                        },
+                    ],
+                },
+            ],
+            "relationship_type": "PROVES_FALSE",
+            "result_status": "NOT_SATISFIED",
+            "reason": (
+                "明确劳动者未提出订立固定期限劳动合同时，"
+                "该 EXCEPTION 条件不成立。"
+            ),
+        },
+    ]
+
+
+# ============================================================
+# V7 Fact → Condition Relationship Validation
+# ============================================================
+
+def validate_article_14_fact_condition_relationships() -> Dict[str, Any]:
+    """
+    验证 Article 14 Fact → Condition Relationship Schema。
+
+    只验证 Canonical Relationship Definition 的结构，
+    不执行任何用户事实判断。
+    """
+
+    relationships = (
+        build_article_14_fact_condition_relationships()
+    )
+
+    valid_condition_ids = set(
+        REQUIRED_CONDITION_IDS
+        + EXCLUSION_CONDITION_IDS
+        + EXCEPTION_CONDITION_IDS
+    )
+
+    valid_relationship_types = {
+        "PROVES_TRUE",
+        "PROVES_FALSE",
+        "DOES_NOT_PROVE",
+    }
+
+    valid_result_statuses = {
+        "SATISFIED",
+        "NOT_SATISFIED",
+        "UNKNOWN",
+    }
+
+    valid_operators = {
+        "==",
+        ">=",
+    }
+
+    relationship_ids = []
+    covered_condition_ids = set()
+
+    valid = isinstance(
+        relationships,
+        list,
+    )
+
+    if valid:
+
+        for relationship in relationships:
+
+            if not isinstance(
+                relationship,
+                dict,
+            ):
+                valid = False
+                break
+
+            required_keys = {
+                "relationship_id",
+                "condition_id",
+                "predicate_groups",
+                "relationship_type",
+                "result_status",
+                "reason",
+            }
+
+            if not required_keys.issubset(
+                relationship.keys()
+            ):
+                valid = False
+                break
+
+            relationship_id = (
+                relationship["relationship_id"]
+            )
+
+            condition_id = (
+                relationship["condition_id"]
+            )
+
+            predicate_groups = (
+                relationship["predicate_groups"]
+            )
+
+            relationship_type = (
+                relationship["relationship_type"]
+            )
+
+            result_status = (
+                relationship["result_status"]
+            )
+
+            relationship_ids.append(
+                relationship_id
+            )
+
+            covered_condition_ids.add(
+                condition_id
+            )
+
+            if (
+                not isinstance(
+                    relationship_id,
+                    str,
+                )
+                or not relationship_id
+            ):
+                valid = False
+                break
+
+            if condition_id not in valid_condition_ids:
+                valid = False
+                break
+
+            if (
+                not isinstance(
+                    predicate_groups,
+                    list,
+                )
+                or not predicate_groups
+            ):
+                valid = False
+                break
+
+            if (
+                relationship_type
+                not in valid_relationship_types
+            ):
+                valid = False
+                break
+
+            if (
+                result_status
+                not in valid_result_statuses
+            ):
+                valid = False
+                break
+
+            if (
+                relationship_type
+                == "PROVES_TRUE"
+                and result_status != "SATISFIED"
+            ):
+                valid = False
+                break
+
+            if (
+                relationship_type
+                == "PROVES_FALSE"
+                and result_status != "NOT_SATISFIED"
+            ):
+                valid = False
+                break
+
+            if (
+                relationship_type
+                == "DOES_NOT_PROVE"
+                and result_status != "UNKNOWN"
+            ):
+                valid = False
+                break
+
+            for group in predicate_groups:
+
+                if not isinstance(
+                    group,
+                    dict,
+                ):
+                    valid = False
+                    break
+
+                if group.get("match") != "ALL":
+                    valid = False
+                    break
+
+                predicates = group.get(
+                    "predicates"
+                )
+
+                if (
+                    not isinstance(
+                        predicates,
+                        list,
+                    )
+                    or not predicates
+                ):
+                    valid = False
+                    break
+
+                for predicate in predicates:
+
+                    if not isinstance(
+                        predicate,
+                        dict,
+                    ):
+                        valid = False
+                        break
+
+                    predicate_keys = {
+                        "fact_key",
+                        "operator",
+                        "value",
+                    }
+
+                    if not predicate_keys.issubset(
+                        predicate.keys()
+                    ):
+                        valid = False
+                        break
+
+                    fact_key = predicate[
+                        "fact_key"
+                    ]
+
+                    operator = predicate[
+                        "operator"
+                    ]
+
+                    if (
+                        not isinstance(
+                            fact_key,
+                            str,
+                        )
+                        or not fact_key
+                    ):
+                        valid = False
+                        break
+
+                    if operator not in valid_operators:
+                        valid = False
+                        break
+
+                if not valid:
+                    break
+
+            if not valid:
+                break
+
+    unique_relationship_id_count = len(
+        set(relationship_ids)
+    )
+
+    expected_condition_count = 8
+
+    return {
+        "valid": (
+            valid
+            and len(relationship_ids)
+            == unique_relationship_id_count
+            and len(covered_condition_ids)
+            == expected_condition_count
+            and covered_condition_ids
+            == valid_condition_ids
+        ),
+        "relationship_count": len(
+            relationships
+        ),
+        "unique_relationship_id_count": (
+            unique_relationship_id_count
+        ),
+        "covered_condition_count": len(
+            covered_condition_ids
+        ),
+        "expected_condition_count": (
+            expected_condition_count
+        ),
+    }
+
+
+# ============================================================
 # Canonical Rule Builder
 # ============================================================
 
@@ -396,6 +1188,15 @@ def build_article_14_definition() -> Dict[str, Any]:
             build_article_14_condition_definitions()
         ),
 
+        # V7 Canonical Fact → Condition Relationships。
+        #
+        # 该字段独立于 condition_definitions。
+        # condition_definitions 只负责 Condition Identity；
+        # relationship 则负责 Fact → Predicate → Condition。
+        "fact_condition_relationships": (
+            build_article_14_fact_condition_relationships()
+        ),
+
         "legal_obligations": list(
             LEGAL_OBLIGATIONS
         ),
@@ -433,6 +1234,14 @@ def validate_article_14_definition() -> Dict[str, Any]:
         + exceptions
     )
 
+    condition_identity_validation = (
+        validate_article_14_condition_identity()
+    )
+
+    relationship_validation = (
+        validate_article_14_fact_condition_relationships()
+    )
+
     return {
         "valid": (
             len(required) == 4
@@ -445,6 +1254,8 @@ def validate_article_14_definition() -> Dict[str, Any]:
             and bool(definition["legal_obligations"])
             and bool(definition["legal_consequences"])
             and bool(definition["references"])
+            and condition_identity_validation["valid"]
+            and relationship_validation["valid"]
         ),
         "required_count": len(required),
         "exclusion_count": len(exclusions),
@@ -452,6 +1263,12 @@ def validate_article_14_definition() -> Dict[str, Any]:
         "condition_count": len(all_conditions),
         "unique_condition_count": len(
             set(all_conditions)
+        ),
+        "condition_identity": (
+            condition_identity_validation
+        ),
+        "fact_condition_relationships": (
+            relationship_validation
         ),
     }
 

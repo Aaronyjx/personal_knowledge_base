@@ -46,7 +46,7 @@ RAG 公共基础工具层。
 为后续继续拆分：
 
     legal_rule_builder.py
-    legal_citation_validator.py
+    legal_basis_validator.py
     legal_decision_engine.py
 
 提供公共基础依赖。

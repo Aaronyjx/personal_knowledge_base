@@ -87,45 +87,37 @@ COMBINED_ARTICLE_39_40_NEGATIVE_PATTERNS = [
 
 def build_core_rule() -> Dict[str, Any]:
     """
-    构建《劳动合同法》第十四条核心规则。
+    构建《劳动合同法》第十四条 Runtime Rule。
+
+    V7：
+
+        Canonical Rule
+            ↓
+        Canonical → Runtime Adapter
+            ↓
+        Runtime Rule
+
+    本函数保留原有公开函数接口，
+    仅作为 Legacy Compatibility Wrapper。
+
+    Article 14 的规则内容、条件定义以及
+    Fact → Condition Relationship 均不得在本模块重新定义。
+
+    唯一 Canonical 来源：
+
+        legal_rule_definition.py
+                ↓
+        legal_rule_registry.py
+                ↓
+        legal_runtime_rule_adapter.py
     """
+
+    from src.legal_runtime_rule_adapter import (
+        canonical_rule_to_runtime_rule,
+    )
 
     canonical_rule = get_rule(RULE_ID)
 
-    return {
-        "rule_id": canonical_rule["rule_id"],
-        "law_name": canonical_rule["law_name"],
-
-        "article": LABOR_CONTRACT_LAW_ARTICLE_14,
-
-        "rule_name": (
-            "连续订立固定期限劳动合同后"
-            "订立无固定期限劳动合同"
-        ),
-
-        "rule_text": (
-            "连续订立二次固定期限劳动合同，"
-            "且不存在法律规定的排除或者例外情形，"
-            "在符合法定续订及劳动者意思表示等条件时，"
-            "依法判断是否应当订立无固定期限劳动合同。"
-        ),
-
-        "conditions": list(
-            canonical_rule["conditions"]
-        ),
-
-        "exclusion_conditions": list(
-            canonical_rule["exclusion_conditions"]
-        ),
-
-        "exceptions": list(
-            canonical_rule["exceptions"]
-        ),
-
-        "condition_definitions": [
-            dict(item)
-            for item in canonical_rule["condition_definitions"]
-        ],
-
-        "priority": "ARTICLE_14",
-    }
+    return canonical_rule_to_runtime_rule(
+        canonical_rule
+    )

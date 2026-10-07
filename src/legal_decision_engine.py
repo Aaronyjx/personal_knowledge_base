@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-RAG V6.0-16
+RAG V7
 Legal Decision Engine
 
 ============================================================
@@ -27,7 +27,7 @@ Ollama
 Final Legal Answer
 
 ============================================================
-V6.0-16 / V6.1 第一阶段核心原则
+V7 核心原则
 ============================================================
 
 1. Decision Engine 只负责法律条件判断。
@@ -110,7 +110,7 @@ V6.0-16 / V6.1 第一阶段核心原则
    就将其中两个或者三个条件错误标记为 UNKNOWN。
 
 ============================================================
-V6.1 第一阶段 Fact → Condition 迁移
+V7 Fact → Relationship → Condition 迁移
 ============================================================
 
 事实层：
@@ -671,150 +671,109 @@ class DecisionResult:
 # ============================================================
 
 def build_rule_dependency(
-    question: str,
-    contract_sequence: Optional[
-        ContractSequence
-    ],
+    condition_results: List[ConditionResult],
     rule: Dict[str, Any],
 ) -> RuleDependency:
     """
-    建立用户事实与 Article 14 条件之间的依赖关系。
+    根据 Decision Engine 已经产生的 ConditionResult
+    建立 RuleDependency。
 
-    重点：
+    V7 原则：
 
-        “三次固定期限合同”
-        不能自动推导：
+        build_rule_dependency() 只负责结果汇总。
 
-            “已经续订”
+        不负责：
+            - 重新读取 LegalFacts
+            - 重新判断 ContractSequence
+            - 重新推导 Article 14 条件
+            - 根据合同次数推导法律关系
+            - 生成第二套 ConditionResult
 
-        也不能自动推导：
+    唯一法律条件判断来源：
 
-            “劳动者已经提出或者同意”
-
-        更不能自动推导：
-
-            “不存在第39条、第40条情形”
+        Canonical Relationship
+            ↓
+        match_condition()
+            ↓
+        ConditionResult
+            ↓
+        build_rule_dependency()
     """
 
-    satisfied_by_fact: List[str] = []
-
-    not_proven_by_fact: List[str] = []
-
-    condition_definitions = rule.get(
-        "condition_definitions",
-        [],
-    )
-
     if not isinstance(
-        condition_definitions,
+        condition_results,
         list,
     ):
         raise ValueError(
-            "Runtime Rule 的 condition_definitions "
-            "必须是 list。"
+            "condition_results 必须是 list。"
         )
 
-    condition_text_by_id = {
-        str(item["condition_id"]).strip(): str(
-            item["condition"]
+    if not isinstance(
+        rule,
+        dict,
+    ):
+        raise ValueError(
+            "rule 必须是 dict。"
+        )
+
+    satisfied_by_fact: List[str] = []
+    not_proven_by_fact: List[str] = []
+
+    for result in condition_results:
+
+        if not isinstance(
+            result,
+            ConditionResult,
+        ):
+            raise ValueError(
+                "condition_results 中的每一项 "
+                "必须是 ConditionResult。"
+            )
+
+        condition = str(
+            result.condition
         ).strip()
-        for item in condition_definitions
-    }
 
-    runtime_conditions = (
-        list(rule.get("conditions", []))
-        + list(
-            rule.get(
-                "exclusion_conditions",
-                [],
+        if not condition:
+            continue
+
+        if result.status == SATISFIED:
+            satisfied_by_fact.append(
+                condition
             )
-        )
-        + list(
-            rule.get(
-                "exceptions",
-                [],
+        else:
+            not_proven_by_fact.append(
+                condition
             )
+
+    rule_name = str(
+        rule.get(
+            "rule_name",
+            rule.get(
+                "rule_id",
+                "",
+            ),
         )
-    )
+    ).strip()
 
-    if (
-        contract_sequence is not None
-        and contract_sequence.count >= 3
-        and contract_sequence.continuous
-    ):
+    if not rule_name:
+        rule_name = "未命名法律规则"
 
-        satisfied_by_fact.extend(
-            [
-                condition_text_by_id["ARTICLE-14-REQUIRED-001"],
-                condition_text_by_id["ARTICLE-14-REQUIRED-002"],
-            ]
-        )
-
-        not_proven_by_fact.extend(
-            [
-                condition_text_by_id["ARTICLE-14-REQUIRED-003"],
-                condition_text_by_id["ARTICLE-14-REQUIRED-004"],
-                "劳动者不存在《劳动合同法》第三十九条规定的情形",
-                "劳动者不存在《劳动合同法》第四十条第一项规定的情形",
-                "劳动者不存在《劳动合同法》第四十条第二项规定的情形",
-                "劳动者未提出订立固定期限劳动合同",
-            ]
-        )
-
+    if not_proven_by_fact:
         explanation = (
-            "三次固定期限劳动合同这一事实，"
-            "可以证明已经连续订立二次固定期限劳动合同，"
-            "并且存在后续订立的劳动合同；"
-            "但仅凭合同次数不能证明已经发生续订，"
-            "也不能证明劳动者已经提出或者同意续订，"
-            "同时不能推定不存在法定排除或者例外情形。"
+            "RuleDependency 由 Decision Engine "
+            "已经产生的 ConditionResult 汇总生成；"
+            "当前仍存在未被事实充分证明的法律条件。"
         )
-
-    elif (
-        contract_sequence is not None
-        and contract_sequence.count == 2
-        and contract_sequence.continuous
-    ):
-
-        satisfied_by_fact.append(
-            condition_text_by_id["ARTICLE-14-REQUIRED-001"]
-        )
-
-        not_proven_by_fact.extend(
-            [
-                condition_text_by_id["ARTICLE-14-REQUIRED-002"],
-                condition_text_by_id["ARTICLE-14-REQUIRED-003"],
-                condition_text_by_id["ARTICLE-14-REQUIRED-004"],
-                "劳动者不存在《劳动合同法》第三十九条规定的情形",
-                "劳动者不存在《劳动合同法》第四十条第一项规定的情形",
-                "劳动者不存在《劳动合同法》第四十条第二项规定的情形",
-                "劳动者未提出订立固定期限劳动合同",
-            ]
-        )
-
-        explanation = (
-            "两次固定期限劳动合同可以证明"
-            "连续订立二次固定期限劳动合同，"
-            "但仅凭两次合同事实，"
-            "不能证明存在后续订立的劳动合同，"
-            "也不能证明已经完成续订，"
-            "同时不能推定劳动者已经同意续订，"
-            "或者不存在法定排除、例外情形。"
-        )
-
     else:
-
-        not_proven_by_fact = list(
-            runtime_conditions
-        )
-
         explanation = (
-            "当前用户事实不足以直接证明"
-            "《劳动合同法》第十四条规定的核心条件。"
+            "RuleDependency 由 Decision Engine "
+            "已经产生的 ConditionResult 汇总生成；"
+            "当前条件均已获得明确状态。"
         )
 
     return RuleDependency(
-        rule_name="劳动合同法第十四条",
+        rule_name=rule_name,
         satisfied_by_fact=unique_texts(
             satisfied_by_fact
         ),
@@ -826,6 +785,417 @@ def build_rule_dependency(
 
 
 # ============================================================
+# V7 Generic Predicate Evaluation
+# ============================================================
+
+def _get_fact_value(
+    facts: LegalFacts,
+    fact_key: str,
+):
+    """
+    根据 Canonical Predicate 的 fact_key
+    从 LegalFacts 中读取事实。
+
+    支持：
+
+        普通字段：
+            article_39
+            article_40_1
+            article_40_2
+            completed_renewal
+            worker_agreement
+            fixed_term_exception
+
+        嵌套字段：
+            contract_sequence.count
+            contract_sequence.term_type
+            contract_sequence.continuous
+
+    None 必须原样返回。
+    """
+
+    current = facts
+
+    for part in str(
+        fact_key
+    ).split("."):
+
+        if current is None:
+            return None
+
+        if isinstance(
+            current,
+            dict,
+        ):
+            current = current.get(
+                part
+            )
+            continue
+
+        if not hasattr(
+            current,
+            part,
+        ):
+            return None
+
+        current = getattr(
+            current,
+            part,
+        )
+
+    return current
+
+
+def _evaluate_predicate(
+    facts: LegalFacts,
+    predicate: Dict[str, Any],
+) -> bool:
+    """
+    执行单个 Canonical Predicate。
+
+    V7 当前只允许：
+
+        ==
+        >=
+
+    注意：
+
+        fact == None
+
+    不会被自动解释为 True。
+
+    对 >=：
+
+        None
+            → False
+
+    """
+
+    fact_key = str(
+        predicate.get(
+            "fact_key",
+            "",
+        )
+    ).strip()
+
+    operator = str(
+        predicate.get(
+            "operator",
+            "",
+        )
+    ).strip()
+
+    expected_value = predicate.get(
+        "value"
+    )
+
+    if not fact_key:
+        raise ValueError(
+            "Canonical Predicate 缺少 fact_key。"
+        )
+
+    if operator not in {
+        "==",
+        ">=",
+    }:
+        raise ValueError(
+            "Canonical Predicate 使用非法 operator："
+            f"{operator}"
+        )
+
+    actual_value = _get_fact_value(
+        facts,
+        fact_key,
+    )
+
+    if operator == "==":
+        return actual_value == expected_value
+
+    if actual_value is None:
+        return False
+
+    return actual_value >= expected_value
+
+
+def _evaluate_predicate_group(
+    facts: LegalFacts,
+    predicate_group: Dict[str, Any],
+) -> bool:
+    """
+    执行一个 Predicate Group。
+
+    当前 Canonical Schema：
+
+        match = ALL
+
+    因此 Group 内：
+
+        predicate1 AND predicate2 AND ...
+
+    """
+
+    match_mode = str(
+        predicate_group.get(
+            "match",
+            "",
+        )
+    ).strip()
+
+    if match_mode != "ALL":
+        raise ValueError(
+            "当前 V7 Predicate Group 只允许 "
+            "match='ALL'。"
+        )
+
+    predicates = predicate_group.get(
+        "predicates",
+        [],
+    )
+
+    if not isinstance(
+        predicates,
+        list,
+    ):
+        raise ValueError(
+            "predicate_group.predicates 必须是 list。"
+        )
+
+    if not predicates:
+        raise ValueError(
+            "Predicate Group 不允许为空。"
+        )
+
+    return all(
+        _evaluate_predicate(
+            facts,
+            predicate,
+        )
+        for predicate in predicates
+    )
+
+
+def _evaluate_relationship(
+    facts: LegalFacts,
+    relationship: Dict[str, Any],
+) -> bool:
+    """
+    判断一个 Canonical Relationship 是否被当前事实组满足。
+
+    Predicate Groups 之间为 OR：
+
+        Group 1 OR Group 2 OR ...
+
+    注意：
+
+        这里的 True 只表示：
+        “该 Predicate Group 被事实满足”。
+
+        最终 ConditionResult.status
+        仍由 relationship_type 决定。
+    """
+
+    predicate_groups = relationship.get(
+        "predicate_groups",
+        [],
+    )
+
+    if not isinstance(
+        predicate_groups,
+        list,
+    ):
+        raise ValueError(
+            "Relationship predicate_groups 必须是 list。"
+        )
+
+    if not predicate_groups:
+        raise ValueError(
+            "Relationship 不允许没有 predicate_groups。"
+        )
+
+    return any(
+        _evaluate_predicate_group(
+            facts,
+            group,
+        )
+        for group in predicate_groups
+    )
+
+
+def _get_condition_relationships(
+    relationships: List[Dict[str, Any]],
+    condition_id: str,
+) -> List[Dict[str, Any]]:
+    """
+    从 Canonical Relationship 集合中取得
+    当前 Condition 的全部 Relationship。
+    """
+
+    matched = [
+        relationship
+        for relationship in relationships
+        if relationship.get(
+            "condition_id"
+        ) == condition_id
+    ]
+
+    if not matched:
+        raise ValueError(
+            "Runtime Rule 缺少当前 Condition 的 "
+            "Canonical Relationship："
+            f"{condition_id}"
+        )
+
+    return matched
+
+
+def _evaluate_condition_from_relationships(
+    facts: LegalFacts,
+    condition_id: str,
+    relationships: List[Dict[str, Any]],
+) -> Tuple[str, str]:
+    """
+    根据 Canonical Relationships 计算：
+
+        status
+        reason
+
+    语义：
+
+        PROVES_TRUE
+            → SATISFIED
+
+        PROVES_FALSE
+            → NOT_SATISFIED
+
+        DOES_NOT_PROVE
+            → UNKNOWN
+
+    Relationship 之间：
+
+        任一 Relationship 命中
+            → 使用该 Relationship 的结果。
+
+    如果没有任何 Relationship 命中：
+
+        → UNKNOWN
+    """
+
+    matched_relationships = (
+        _get_condition_relationships(
+            relationships,
+            condition_id,
+        )
+    )
+
+    for relationship in matched_relationships:
+
+        relationship_type = relationship.get(
+            "relationship_type"
+        )
+
+        result_status = relationship.get(
+            "result_status"
+        )
+
+        if relationship_type == "PROVES_TRUE":
+
+            if result_status != SATISFIED:
+                raise ValueError(
+                    "Canonical Relationship 语义不一致："
+                    f"relationship_id="
+                    f"{relationship.get('relationship_id')}"
+                    f"\nrelationship_type="
+                    f"{relationship_type}"
+                    f"\nresult_status="
+                    f"{result_status}"
+                )
+
+            if _evaluate_relationship(
+                facts,
+                relationship,
+            ):
+
+                return (
+                    SATISFIED,
+                    str(
+                        relationship.get(
+                            "reason",
+                            "",
+                        )
+                    ),
+                )
+
+        elif relationship_type == "PROVES_FALSE":
+
+            if result_status != NOT_SATISFIED:
+                raise ValueError(
+                    "Canonical Relationship 语义不一致："
+                    f"relationship_id="
+                    f"{relationship.get('relationship_id')}"
+                    f"\nrelationship_type="
+                    f"{relationship_type}"
+                    f"\nresult_status="
+                    f"{result_status}"
+                )
+
+            if _evaluate_relationship(
+                facts,
+                relationship,
+            ):
+
+                return (
+                    NOT_SATISFIED,
+                    str(
+                        relationship.get(
+                            "reason",
+                            "",
+                        )
+                    ),
+                )
+
+        elif relationship_type == "DOES_NOT_PROVE":
+
+            if result_status != UNKNOWN:
+                raise ValueError(
+                    "Canonical Relationship 语义不一致："
+                    f"relationship_id="
+                    f"{relationship.get('relationship_id')}"
+                    f"\nrelationship_type="
+                    f"{relationship_type}"
+                    f"\nresult_status="
+                    f"{result_status}"
+                )
+
+            if _evaluate_relationship(
+                facts,
+                relationship,
+            ):
+
+                return (
+                    UNKNOWN,
+                    str(
+                        relationship.get(
+                            "reason",
+                            "",
+                        )
+                    ),
+                )
+
+        else:
+            raise ValueError(
+                "Canonical Relationship 使用非法 "
+                "relationship_type："
+                f"{relationship_type}"
+            )
+
+    return (
+        UNKNOWN,
+        "当前事实不足以证明该法律条件。",
+    )
+
+
+
+# ============================================================
 # Condition Matching
 # ============================================================
 
@@ -834,539 +1204,122 @@ def match_condition(
     condition_id: str,
     condition: str,
     condition_type: str,
+    relationships: Optional[
+        List[Dict[str, Any]]
+    ] = None,
 ) -> ConditionResult:
     """
     对单项法律条件进行判断。
 
-    V6.1 第一阶段：
-
-        本函数不再接收 question。
-
-        本函数不再：
-            - normalize_text(question)
-            - contains_any(...)
-            - has_completed_renewal(...)
-            - 自己扫描自然语言模式
-
-        本函数只消费 LegalFacts。
-
-    Fact Layer：
+    V7：
 
         LegalFacts
             ↓
-        Condition Mapping
+        Canonical Relationship
+            ↓
+        Generic Predicate Evaluator
             ↓
         ConditionResult
 
+    本函数不再保存 Article 14 的法律条件判断逻辑。
+
+    Article 14 的具体法律关系由：
+
+        Runtime Rule
+            ↓
+        fact_condition_relationships
+
+    提供。
+
+    为保持现有调用兼容性：
+
+        relationships
+
+    参数允许为空。
+
+    如果为空，则通过 Canonical Registry
+    取得当前 Rule 的 Relationships。
+
     注意：
 
-        LegalFacts 中的 None 必须保持 UNKNOWN。
+        None 必须保持 UNKNOWN。
 
-        Engine 不得因为上下文或者推测，
-        将 None 自动升级为 SATISFIED。
+        不允许根据合同次数、
+        上下文或者自然语言推测，
+        自动升级为 SATISFIED。
     """
 
-    # ========================================================
-    # V6.2 Stable Condition Identity
-    # ========================================================
-    #
-    # 所有法律条件判断继续使用原有事实判断逻辑。
-    #
-    # ConditionResult 的构造统一经过这里，
-    # 由上游传入的 condition_id 作为稳定机器身份。
-    #
-    # 不在这里根据条件位置生成 condition_id。
-    # ========================================================
+    if relationships is None:
 
-    def build_condition_result(
-        condition: str,
-        status: str,
-        reason: str,
-        condition_type: str,
-    ) -> ConditionResult:
-        """
-        统一构造 V6.2 ConditionResult。
+        from src.legal_rule_registry import (
+            get_rule,
+        )
 
-        condition_id：
-            来自 evaluate_rule() 传入的稳定条件身份。
+        # 当前系统只有 Article 14 核心 Rule。
+        # 通过 Registry 获取 Canonical Rule，
+        # 不重新定义法律条件。
+        #
+        # 后续多 Rule 执行框架完成后，
+        # 可由上游统一传入 relationships，
+        # 消除这里的兼容性 fallback。
 
-        condition：
-            当前法律条件原文。
+        canonical_rule = get_rule(
+            "RULE-001"
+        )
 
-        condition_type：
-            当前法律条件类别。
+        relationships = canonical_rule.get(
+            "fact_condition_relationships",
+            [],
+        )
 
-        status / reason：
-            继续使用原有法律事实判断结果。
-        """
+    if not isinstance(
+        relationships,
+        list,
+    ):
+        raise ValueError(
+            "fact_condition_relationships 必须是 list。"
+        )
 
-        return ConditionResult(
+    status, relationship_reason = (
+        _evaluate_condition_from_relationships(
+            facts=facts,
             condition_id=condition_id,
-            condition=condition,
-            status=status,
-            reason=reason,
-            condition_type=condition_type,
+            relationships=relationships,
+        )
+    )
+
+    if status == SATISFIED:
+
+        reason = (
+            relationship_reason
+            or
+            "Canonical Relationship 已被当前事实满足。"
         )
 
-    # ========================================================
-    # REQUIRED 1
-    # ========================================================
+    elif status == NOT_SATISFIED:
 
-    if condition_id == "ARTICLE-14-REQUIRED-001":
-
-        contract_sequence = (
-            facts.contract_sequence
+        reason = (
+            relationship_reason
+            or
+            "Canonical Relationship 已被当前事实证明不成立。"
         )
 
-        if (
-            contract_sequence is not None
-            and contract_sequence.count >= 2
-            and contract_sequence.term_type == "fixed"
-            and contract_sequence.continuous
-        ):
+    else:
 
-            return build_condition_result(
-                condition=condition,
-                status=SATISFIED,
-                reason=(
-                    "用户明确陈述连续订立"
-                    "至少二次固定期限劳动合同。"
-                ),
-                condition_type=REQUIRED,
-            )
-
-        return build_condition_result(
-            condition=condition,
-            status=UNKNOWN,
-            reason=(
-                "当前事实不足以确认"
-                "连续订立二次固定期限劳动合同。"
-            ),
-            condition_type=REQUIRED,
+        reason = (
+            relationship_reason
+            or
+            "当前事实不足以证明该法律条件。"
         )
 
-    # ========================================================
-    # REQUIRED 2
-    # ========================================================
-
-    if condition_id == "ARTICLE-14-REQUIRED-002":
-
-        contract_sequence = (
-            facts.contract_sequence
-        )
-
-        if (
-            contract_sequence is not None
-            and contract_sequence.count >= 3
-            and contract_sequence.term_type == "fixed"
-        ):
-
-            return build_condition_result(
-                condition=condition,
-                status=SATISFIED,
-                reason=(
-                    "用户明确陈述已经存在"
-                    "第三次固定期限劳动合同，"
-                    "因此可以确认存在后续订立的劳动合同。"
-                ),
-                condition_type=REQUIRED,
-            )
-
-        if facts.completed_renewal is True:
-
-            return build_condition_result(
-                condition=condition,
-                status=SATISFIED,
-                reason=(
-                    "用户明确陈述已经完成续订/续签，"
-                    "因此可以确认存在后续劳动合同。"
-                ),
-                condition_type=REQUIRED,
-            )
-
-        return build_condition_result(
-            condition=condition,
-            status=UNKNOWN,
-            reason=(
-                "当前事实不足以确认"
-                "存在后续订立的劳动合同。"
-            ),
-            condition_type=REQUIRED,
-        )
-
-    # ========================================================
-    # REQUIRED 3
-    # ========================================================
-
-    if condition_id == "ARTICLE-14-REQUIRED-003":
-
-        if facts.completed_renewal is True:
-
-            return build_condition_result(
-                condition=condition,
-                status=SATISFIED,
-                reason=(
-                    "用户明确使用“已经续订”“已经续签”"
-                    "等完成性表述，"
-                    "可以确认续订事实已经发生。"
-                ),
-                condition_type=REQUIRED,
-            )
-
-        contract_sequence = (
-            facts.contract_sequence
-        )
-
-        if (
-            contract_sequence is not None
-            and contract_sequence.count >= 3
-        ):
-
-            return build_condition_result(
-                condition=condition,
-                status=UNKNOWN,
-                reason=(
-                    "虽然已经存在三次固定期限劳动合同，"
-                    "但合同次数本身不能自动证明"
-                    "第三次属于已经完成的续订。"
-                ),
-                condition_type=REQUIRED,
-            )
-
-        return build_condition_result(
-            condition=condition,
-            status=UNKNOWN,
-            reason=(
-                "当前事实不足以确认"
-                "续订劳动合同已经完成。"
-            ),
-            condition_type=REQUIRED,
-        )
-
-    # ========================================================
-    # REQUIRED 4
-    # ========================================================
-
-    if condition_id == "ARTICLE-14-REQUIRED-004":
-
-        if facts.worker_agreement is True:
-
-            return build_condition_result(
-                condition=condition,
-                status=SATISFIED,
-                reason=(
-                    "用户明确陈述劳动者"
-                    "提出或者同意续订、订立劳动合同。"
-                ),
-                condition_type=REQUIRED,
-            )
-
-        contract_sequence = (
-            facts.contract_sequence
-        )
-
-        if (
-            contract_sequence is not None
-            and contract_sequence.count >= 2
-        ):
-
-            return build_condition_result(
-                condition=condition,
-                status=UNKNOWN,
-                reason=(
-                    "已经存在两次或者三次固定期限劳动合同，"
-                    "但合同次数本身不能证明劳动者"
-                    "提出或者同意续订、订立劳动合同。"
-                ),
-                condition_type=REQUIRED,
-            )
-
-        return build_condition_result(
-            condition=condition,
-            status=UNKNOWN,
-            reason=(
-                "当前事实不足以确认劳动者"
-                "提出或者同意续订、订立劳动合同。"
-            ),
-            condition_type=REQUIRED,
-        )
-
-    # ========================================================
-    # EXCLUSION 1
-    # Article 39
-    # ========================================================
-
-    if condition_id == "ARTICLE-14-EXCLUSION-001":
-
-        # ----------------------------------------------------
-        # True：
-        #
-        # 用户明确陈述存在 Article 39 情形。
-        #
-        # 对 EXCLUSION 而言：
-        #
-        # 排除情形成立
-        #     → 条件 SATISFIED
-        #     → 触发 NOT_ESTABLISHED
-        # ----------------------------------------------------
-
-        if facts.article_39 is True:
-
-            return build_condition_result(
-                condition=condition,
-                status=SATISFIED,
-                reason=(
-                    "用户明确陈述存在"
-                    "《劳动合同法》第三十九条规定的情形，"
-                    "因此该排除条件已经触发。"
-                ),
-                condition_type=EXCLUSION,
-            )
-
-        # ----------------------------------------------------
-        # False：
-        #
-        # 用户明确陈述不存在 Article 39 情形。
-        #
-        # 对 EXCLUSION 而言：
-        #
-        # 排除情形不存在
-        #     → 条件 NOT_SATISFIED
-        #     → 不触发 NOT_ESTABLISHED
-        # ----------------------------------------------------
-
-        if facts.article_39 is False:
-
-            return build_condition_result(
-                condition=condition,
-                status=NOT_SATISFIED,
-                reason=(
-                    "用户明确陈述不存在"
-                    "《劳动合同法》第三十九条规定的情形，"
-                    "因此该排除条件未被触发。"
-                ),
-                condition_type=EXCLUSION,
-            )
-
-        # ----------------------------------------------------
-        # None：
-        #
-        # 用户没有明确说明。
-        #
-        # 不得推测。
-        # ----------------------------------------------------
-
-        return build_condition_result(
-            condition=condition,
-            status=UNKNOWN,
-            reason=(
-                "当前事实不足以确认劳动者"
-                "是否存在《劳动合同法》第三十九条规定的情形。"
-            ),
-            condition_type=EXCLUSION,
-        )
-
-    # ========================================================
-    # EXCLUSION 2
-    # Article 40(1)
-    # ========================================================
-
-    if condition_id == "ARTICLE-14-EXCLUSION-002":
-
-        # ----------------------------------------------------
-        # True：
-        #
-        # 用户明确陈述存在 Article 40(1) 情形。
-        #
-        # 排除情形成立
-        #     → SATISFIED
-        #     → 触发 NOT_ESTABLISHED
-        # ----------------------------------------------------
-
-        if facts.article_40_1 is True:
-
-            return build_condition_result(
-                condition=condition,
-                status=SATISFIED,
-                reason=(
-                    "用户明确陈述存在"
-                    "《劳动合同法》第四十条第一项规定的情形，"
-                    "因此该排除条件已经触发。"
-                ),
-                condition_type=EXCLUSION,
-            )
-
-        # ----------------------------------------------------
-        # False：
-        #
-        # 用户明确陈述不存在 Article 40(1) 情形。
-        #
-        # 排除情形不存在
-        #     → NOT_SATISFIED
-        # ----------------------------------------------------
-
-        if facts.article_40_1 is False:
-
-            return build_condition_result(
-                condition=condition,
-                status=NOT_SATISFIED,
-                reason=(
-                    "用户明确陈述不存在"
-                    "《劳动合同法》第四十条第一项规定的情形，"
-                    "因此该排除条件未被触发。"
-                ),
-                condition_type=EXCLUSION,
-            )
-
-        return build_condition_result(
-            condition=condition,
-            status=UNKNOWN,
-            reason=(
-                "当前事实不足以确认劳动者"
-                "是否存在《劳动合同法》第四十条第一项规定的情形。"
-            ),
-            condition_type=EXCLUSION,
-        )
-
-    # ========================================================
-    # EXCLUSION 3
-    # Article 40(2)
-    # ========================================================
-
-    if condition_id == "ARTICLE-14-EXCLUSION-003":
-
-        # ----------------------------------------------------
-        # True：
-        #
-        # 用户明确陈述存在 Article 40(2) 情形。
-        #
-        # 排除情形成立
-        #     → SATISFIED
-        #     → 触发 NOT_ESTABLISHED
-        # ----------------------------------------------------
-
-        if facts.article_40_2 is True:
-
-            return build_condition_result(
-                condition=condition,
-                status=SATISFIED,
-                reason=(
-                    "用户明确陈述存在"
-                    "《劳动合同法》第四十条第二项规定的情形，"
-                    "因此该排除条件已经触发。"
-                ),
-                condition_type=EXCLUSION,
-            )
-
-        # ----------------------------------------------------
-        # False：
-        #
-        # 用户明确陈述不存在 Article 40(2) 情形。
-        #
-        # 排除情形不存在
-        #     → NOT_SATISFIED
-        # ----------------------------------------------------
-
-        if facts.article_40_2 is False:
-
-            return build_condition_result(
-                condition=condition,
-                status=NOT_SATISFIED,
-                reason=(
-                    "用户明确陈述不存在"
-                    "《劳动合同法》第四十条第二项规定的情形，"
-                    "因此该排除条件未被触发。"
-                ),
-                condition_type=EXCLUSION,
-            )
-
-        return build_condition_result(
-            condition=condition,
-            status=UNKNOWN,
-            reason=(
-                "当前事实不足以确认劳动者"
-                "是否存在《劳动合同法》第四十条第二项规定的情形。"
-            ),
-            condition_type=EXCLUSION,
-        )
-
-    # ========================================================
-    # EXCEPTION
-    # ========================================================
-
-    if condition_id == "ARTICLE-14-EXCEPTION-001":
-
-        # ----------------------------------------------------
-        # True：
-        #
-        # 用户明确陈述劳动者提出订立固定期限劳动合同。
-        #
-        # 例外条件成立
-        #     → SATISFIED
-        #     → 触发 NOT_ESTABLISHED
-        # ----------------------------------------------------
-
-        if facts.fixed_term_exception is True:
-
-            return build_condition_result(
-                condition=condition,
-                status=SATISFIED,
-                reason=(
-                    "用户明确陈述劳动者提出"
-                    "订立固定期限劳动合同，"
-                    "因此该例外条件已经触发。"
-                ),
-                condition_type=EXCEPTION,
-            )
-
-        # ----------------------------------------------------
-        # False：
-        #
-        # 用户明确陈述劳动者没有提出订立固定期限劳动合同。
-        #
-        # 例外条件不存在
-        #     → NOT_SATISFIED
-        # ----------------------------------------------------
-
-        if facts.fixed_term_exception is False:
-
-            return build_condition_result(
-                condition=condition,
-                status=NOT_SATISFIED,
-                reason=(
-                    "用户明确陈述劳动者没有提出"
-                    "订立固定期限劳动合同，"
-                    "因此该例外条件未被触发。"
-                ),
-                condition_type=EXCEPTION,
-            )
-
-        # ----------------------------------------------------
-        # None：
-        #
-        # 用户没有明确说明。
-        # ----------------------------------------------------
-
-        return build_condition_result(
-            condition=condition,
-            status=UNKNOWN,
-            reason=(
-                "当前事实不足以确认劳动者"
-                "是否提出订立固定期限劳动合同。"
-            ),
-            condition_type=EXCEPTION,
-        )
-
-    # ========================================================
-    # Default
-    # ========================================================
-
-    return build_condition_result(
+    return ConditionResult(
+        condition_id=condition_id,
         condition=condition,
-        status=UNKNOWN,
-        reason="当前条件没有匹配到明确事实。",
+        status=status,
+        reason=reason,
         condition_type=condition_type,
     )
+
 
 
 # ============================================================
@@ -1804,6 +1757,10 @@ def evaluate_rule(
             condition_id=condition_id,
             condition=condition,
             condition_type=condition_type,
+            relationships=rule.get(
+                "fact_condition_relationships",
+                [],
+            ),
         )
 
         condition_results.append(
@@ -2200,16 +2157,6 @@ def make_decision(
     )
 
     # --------------------------------------------------------
-    # Rule Dependency
-    # --------------------------------------------------------
-
-    dependency = build_rule_dependency(
-        normalized_question,
-        contract_sequence,
-        core_rule,
-    )
-
-    # --------------------------------------------------------
     # Decision Engine
     # --------------------------------------------------------
     #
@@ -2226,6 +2173,24 @@ def make_decision(
     ) = evaluate_rule(
         facts=facts,
         rule=core_rule,
+    )
+
+    # --------------------------------------------------------
+    # Rule Dependency
+    # --------------------------------------------------------
+    #
+    # V7：
+    #
+    # Dependency 只能消费 Decision Engine 已经产生的
+    # ConditionResult。
+    #
+    # 不再重新读取 LegalFacts，
+    # 不再重新推导 Article 14 法律条件。
+    # --------------------------------------------------------
+
+    dependency = build_rule_dependency(
+        condition_results,
+        core_rule,
     )
 
     # --------------------------------------------------------

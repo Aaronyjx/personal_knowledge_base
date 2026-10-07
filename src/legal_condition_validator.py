@@ -830,6 +830,36 @@ def validate_unknown_conditions(
 
     if not unknown:
 
+        # V7：
+        #
+        # “尚未确认条件：- 无。”
+        # 是结构化答案中“没有 UNKNOWN 条件”的展示方式。
+        # 标题虽然包含“尚未确认”，但并不表示答案制造了 UNKNOWN。
+        #
+        # 因此在 UNKNOWN 语义扫描前，移除明确表示“无”的
+        # “未知/未确认条件”空列表标题。
+        #
+        # 注意：
+        #
+        #     尚未确认条件：
+        #     - 无。
+        #
+        # 必须放行；
+        #
+        #     尚未确认条件：
+        #     - 劳动者是否同意续订。
+        #
+        # 仍然必须拦截。
+        answer_for_unknown_scan = answer_text
+
+        answer_for_unknown_scan = re.sub(
+            r"(?:尚未确认条件|未确认条件|未知条件)\s*[：:]\s*"
+            r"(?:[-*•]\s*)?(?:无|没有|None|none|N/A|n/a)\s*[。.]?",
+            "",
+            answer_for_unknown_scan,
+            flags=re.IGNORECASE,
+        )
+
         extra_unknown_patterns = [
             UNKNOWN,
             "unknown",
@@ -904,7 +934,7 @@ def validate_unknown_conditions(
         ]
 
         if any(
-            normalize_text(pattern) in answer_text
+            normalize_text(pattern) in answer_for_unknown_scan
             for pattern in extra_unknown_patterns
         ):
             return False

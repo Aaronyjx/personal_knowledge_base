@@ -79,6 +79,7 @@ from typing import Any, Dict
 
 from src.legal_common import (
     ensure_list,
+    get_field,
     normalize_text,
     unique_texts,
 )
@@ -324,9 +325,82 @@ def build_fallback_answer(
     )
 
     # ========================================================
-    # Structured Rules
+    # Rule Provenance
+    #
+    # V7：
+    #
+    # Decision Engine 已经确定的 Runtime Rule，
+    # 是 Fallback 的唯一核心 Rule 来源。
+    #
+    # raw_decision:
+    #
+    #     DecisionResult
+    #          ↓
+    #     selected_rule
+    #
+    # Retriever rules 仍然保留在 rules 中，
+    # 但仅用于法律依据等辅助展示。
     # ========================================================
 
+    raw_decision = decision.get(
+        "raw_decision",
+        None,
+    )
+
+    # ========================================================
+    # 核心 Rule 来源
+    # ========================================================
+    #
+    # V7 Provenance 原则：
+    #
+    # 1. 优先使用真实 DecisionResult 中的
+    #    raw_decision.selected_rule。
+    #
+    # 2. raw_decision 可能是：
+    #
+    #       DecisionResult 对象
+    #       或 dict
+    #
+    #    因此必须使用 get_field() 兼容两种结构。
+    #
+    # 3. 对旧测试 / 兼容调用，如果没有 raw_decision，
+    #    允许使用当前 decision.selected_rule。
+    #
+    # 4. 绝不能从 Retriever rules 重新选择核心 Rule。
+    #
+    #    Retriever rules 只能作为辅助法律依据来源。
+    #
+    core_rule = get_field(
+        raw_decision,
+        "selected_rule",
+        None,
+    )
+
+    if not isinstance(
+        core_rule,
+        dict,
+    ):
+        core_rule = decision.get(
+            "selected_rule",
+            None,
+        )
+
+    if not isinstance(
+        core_rule,
+        dict,
+    ):
+        raise ValueError(
+            "Fallback 未获得 Decision Engine 的 "
+            "Runtime Rule："
+            "raw_decision.selected_rule / "
+            "decision.selected_rule"
+        )
+
+    # Retriever Rules：
+    #
+    # 继续作为法律依据等辅助信息来源。
+    #
+    # 不再使用它们选择核心 Rule。
     rules = build_rules_from_articles(
         ensure_list(
             decision.get(
@@ -922,48 +996,52 @@ def build_fallback_answer(
     definite_obligations = []
     definite_consequences = []
 
-    for rule in rules:
+    # ========================================================
+    # V7 Rule Provenance：
+    #
+    # 核心法律义务 / 法律后果必须来自
+    # Decision Engine 已经选择的 Runtime Rule。
+    #
+    # 不再从 Retriever rules 中重新选择核心 Rule。
+    # ========================================================
 
-        if not isinstance(rule, dict):
-            continue
+    legal_obligations = ensure_list(
+        core_rule.get(
+            "legal_obligations",
+            [],
+        )
+    )
 
-        legal_obligations = ensure_list(
-            rule.get(
-                "legal_obligations",
-                [],
-            )
+    legal_consequences = ensure_list(
+        core_rule.get(
+            "legal_consequences",
+            [],
+        )
+    )
+
+    for obligation in legal_obligations:
+
+        obligation_text = normalize_text(
+            obligation
         )
 
-        legal_consequences = ensure_list(
-            rule.get(
-                "legal_consequences",
-                [],
+        if obligation_text:
+
+            definite_obligations.append(
+                obligation_text
             )
+
+    for consequence in legal_consequences:
+
+        consequence_text = normalize_text(
+            consequence
         )
 
-        for obligation in legal_obligations:
+        if consequence_text:
 
-            obligation_text = normalize_text(
-                obligation
+            definite_consequences.append(
+                consequence_text
             )
-
-            if obligation_text:
-
-                definite_obligations.append(
-                    obligation_text
-                )
-
-        for consequence in legal_consequences:
-
-            consequence_text = normalize_text(
-                consequence
-            )
-
-            if consequence_text:
-
-                definite_consequences.append(
-                    consequence_text
-                )
 
     definite_obligations = unique_texts(
         definite_obligations
@@ -1039,6 +1117,7 @@ def build_fallback_answer(
 
             conclusion_lines = [
                 "是。"
+                + "当前属于确定性结论（DEFINITE）。"
                 + "根据已经确认的结构化法律条件，"
                 + "、".join(
                     definite_obligations
@@ -1474,10 +1553,14 @@ def build_fallback_answer(
     related_basis_lines = []
     seen_basis = set()
 
-    rules = prioritize_legal_rules(
-        question=question,
-        rules=rules,
-    )
+    # ========================================================
+    # V7：
+    #
+    # Retriever Rules 只作为法律依据展示来源。
+    #
+    # 不再通过 prioritize_legal_rules()
+    # 重新选择 Fallback 核心 Rule。
+    # ========================================================
 
     for rule in rules:
 

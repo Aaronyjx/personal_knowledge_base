@@ -545,7 +545,9 @@ class StructuredAnswer:
         default_factory=dict
     )
 
-    selected_rule: str = ""
+    selected_rule: Dict[str, Any] = field(
+        default_factory=dict
+    )
 
     explanation: str = ""
 
@@ -1050,18 +1052,24 @@ def _build_legal_rules(
 
     result: List[str] = []
 
-    selected_rule = safe_text(
-        get_value(
-            decision,
-            "selected_rule",
-            "",
-        )
+    selected_rule = get_value(
+        decision,
+        "selected_rule",
+        {},
     )
 
-    if selected_rule:
-        result.append(
-            selected_rule
+    if isinstance(selected_rule, dict):
+        rule_name = safe_text(
+            selected_rule.get(
+                "rule_name",
+                "",
+            )
         )
+
+        if rule_name:
+            result.append(
+                rule_name
+            )
 
     dependencies = normalize_list(
         get_value(
@@ -1592,13 +1600,16 @@ def build_structured_answer(
         )
     )
 
-    selected_rule = safe_text(
-        get_value(
-            decision,
-            "selected_rule",
-            "",
-        )
+    selected_rule = get_value(
+        decision,
+        "selected_rule",
+        {},
     )
+
+    if not isinstance(selected_rule, dict):
+        raise ValueError(
+            "DecisionResult.selected_rule 必须是 Runtime Rule dict。"
+        )
 
     explanation = safe_text(
         get_value(

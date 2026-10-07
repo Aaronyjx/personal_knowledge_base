@@ -124,7 +124,7 @@ src/legal_validation.py
     ↓
     Final Validation
 
-src/legal_citation_validator.py
+src/legal_basis_validator.py
     ↓
     Legal Citation Validation
 
@@ -524,7 +524,7 @@ def validate_answer_structure(
 
     法律依据验证属于：
 
-        src/legal_citation_validator.py
+        src/legal_basis_validator.py
 
     本函数只检查：
 

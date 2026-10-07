@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-RAG V6.2 Runtime Rule Execution Regression Test
+RAG V7 Runtime Rule Execution Regression Test
 
 测试目标：
 
@@ -42,6 +42,12 @@ Condition ID 作为 Fact Matcher 的测试入口，
 from src.legal_decision_engine import (
     evaluate_rule,
 )
+from src.legal_rule_definition import (
+    RULE_ID,
+)
+from src.legal_rule_registry import (
+    get_rule,
+)
 from src.legal_fact_models import (
     ContractSequence,
     LegalFacts,
@@ -50,7 +56,7 @@ from src.legal_fact_models import (
 
 def build_test_rule():
     """
-    构造一个只有 1 条 REQUIRED 条件的 Runtime Rule。
+    构造一个只有 1 条 REQUIRED 条件的 V7 Runtime Rule。
 
     关键点：
 
@@ -63,28 +69,86 @@ def build_test_rule():
             EXCEPTION × 1
 
     使用 ARTICLE-14-REQUIRED-001
-    只是为了复用现有 Fact Matcher。
+    只是为了复用现有 Canonical Fact → Condition
+    Relationship 作为测试入口。
 
-    这不意味着 Runtime Rule 是 Article 14 Canonical Rule。
+    本测试不会复制 Relationship 定义。
+
+    Relationship 来源：
+
+        Canonical Rule Registry
+                ↓
+        ARTICLE-14-REQUIRED-001
+                ↓
+        Synthetic Runtime Rule
+
+    因此本测试验证的是：
+
+        V7 Runtime Rule
+            ↓
+        Relationship-driven evaluate_rule()
+
+    而不是重新定义 Article 14 法律规则。
     """
 
+    canonical_rule = get_rule(RULE_ID)
+
+    condition_definitions = [
+        dict(item)
+        for item in canonical_rule[
+            "condition_definitions"
+        ]
+        if item["condition_id"]
+        == "ARTICLE-14-REQUIRED-001"
+    ]
+
+    relationships = [
+        dict(item)
+        for item in canonical_rule[
+            "fact_condition_relationships"
+        ]
+        if any(
+            predicate.get("fact_key")
+            for group in item.get(
+                "predicate_groups",
+                [],
+            )
+            for predicate in group.get(
+                "predicates",
+                [],
+            )
+        )
+        and item["relationship_id"].startswith(
+            "ARTICLE-14-REL-REQUIRED-001-"
+        )
+    ]
+
+    if len(condition_definitions) != 1:
+        raise AssertionError(
+            "Canonical Rule 缺少 ARTICLE-14-REQUIRED-001 "
+            "Condition Definition。"
+        )
+
+    if not relationships:
+        raise AssertionError(
+            "Canonical Rule 缺少 "
+            "ARTICLE-14-REQUIRED-001 Relationship。"
+        )
+
     return {
-        "rule_id": "TEST-RULE-V6.2-EXECUTION-001",
-        "law_name": "V6.2 Runtime Rule Test Law",
+        "rule_id": "TEST-RULE-V7-EXECUTION-001",
+        "law_name": "V7 Runtime Rule Test Law",
         "article_number": "测试条款",
         "rule_name": "Runtime Rule Execution Test",
         "conditions": [
-            "测试必要条件",
+            condition_definitions[0]["condition"],
         ],
         "exclusion_conditions": [],
         "exceptions": [],
         "condition_definitions": [
-            {
-                "condition_id": "ARTICLE-14-REQUIRED-001",
-                "condition": "测试必要条件",
-                "condition_type": "REQUIRED",
-            },
+            condition_definitions[0],
         ],
+        "fact_condition_relationships": relationships,
     }
 
 

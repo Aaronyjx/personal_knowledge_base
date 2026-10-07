@@ -473,9 +473,19 @@ def build_plain_answer(
     )
 
     if structured_answer.selected_rule:
-        lines.append(
-            structured_answer.selected_rule
+        rule_name = structured_answer.selected_rule.get(
+            "rule_name",
+            "",
         )
+
+        if rule_name:
+            lines.append(
+                rule_name
+            )
+        else:
+            lines.append(
+                "未命名法律规则"
+            )
     else:
         lines.append(
             "未提供"

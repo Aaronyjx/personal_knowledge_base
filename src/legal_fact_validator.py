@@ -13,12 +13,25 @@ Legal Fact Validator
 
 包含：
 
-1. validate_fact_condition_mapping()
-2. validate_user_facts()
-3. validate_three_contract_fact()
+1. validate_user_facts()
 
-本模块只负责 Fact Fidelity。
-不负责：
+V7 职责边界：
+
+本模块只负责 Fact Fidelity，
+即验证最终答案是否忠实保留 DecisionResult 中已经存在的用户事实。
+
+本模块不负责：
+
+- Fact → Condition 法律关系判定
+- ConditionResult 生成
+- Article 14 专项法律条件推理
+- 三次固定期限劳动合同专项法律判断
+- UNKNOWN / SATISFIED / NOT_SATISFIED 状态判定
+- Answer Sanitization
+- Condition Safety
+- Legal Citation
+- Decision Consistency
+- Final Validation
 
 - Answer Sanitization
 - Condition Safety
@@ -39,90 +52,6 @@ from src.legal_common import (
 # ============================================================
 # Fact Fidelity
 # ============================================================
-
-
-def validate_fact_condition_mapping(
-    answer: str,
-    question: str,
-    decision: Dict[str, Any],
-) -> bool:
-    """
-    V6.0-27：验证最终答案严格遵守 Fact → Condition → Consequence 依赖。
-
-    对“三次固定期限劳动合同”问题：
-
-    - 必须承认“三次”已经覆盖“连续订立二次固定期限劳动合同”数量门槛；
-    - 不得把“三次”重新制造成第三次合同是否存在/是否连续的 UNKNOWN；
-    - 不得把“是否续订劳动合同”偷换成“是否提出订立无固定期限劳动合同”；
-    - 不得把“三次”直接解释为劳动者已经提出或同意下一次订立无固定期限劳动合同。
-    """
-    if not answer:
-        return False
-
-    q = normalize_text(question)
-    has_three = (
-        "三次" in q and "固定期限劳动合同" in q
-    ) or any(
-        "三次" in normalize_text(fact)
-        and "固定期限劳动合同" in normalize_text(fact)
-        for fact in ensure_list(decision.get("user_facts", []))
-    )
-
-    if not has_three:
-        return True
-
-    forbidden_patterns = [
-        "第三次合同是否存在",
-        "是否已经签订第三份合同",
-        "第三次是否属于连续合同序列",
-        "劳动者是否在第三次续订时提出或同意订立无固定期限劳动合同",
-        "劳动者是否提出或同意订立无固定期限劳动合同",
-    ]
-
-    if any(pattern in answer for pattern in forbidden_patterns):
-        return False
-
-    # 禁止把“三次”事实直接等同于已经发生下一次续订或已经提出订立
-    # 无固定期限劳动合同。
-    invented_patterns = [
-        "三次合同已经证明劳动者同意续订",
-        "三次合同已经证明劳动者提出续订",
-        "三次合同已经证明劳动者提出订立无固定期限劳动合同",
-        "三次固定期限劳动合同即表示劳动者同意订立无固定期限劳动合同",
-        "已经证明劳动者同意订立无固定期限劳动合同",
-        "已经证明劳动者提出订立无固定期限劳动合同",
-        "已经证明劳动者同意签订无固定期限劳动合同",
-        "已经证明劳动者提出签订无固定期限劳动合同",
-        "已经证明劳动者同意订立无固定期限劳动合同的义务",
-        "三次固定期限劳动合同，所以已经证明劳动者同意订立无固定期限劳动合同",
-    ]
-
-    # 进一步防止条件语义偷换：
-    # “劳动者提出或者同意续订、订立劳动合同”是原始法律条件，
-    # 不能被改写成“劳动者已经提出/同意订立无固定期限劳动合同”。
-    # 后者属于更具体、且并非原条件的意思表示。
-    normalized_answer = normalize_text(answer)
-    has_wrong_indefinite_condition = (
-        ("劳动者同意" in normalized_answer or "劳动者提出" in normalized_answer)
-        and (
-            "订立无固定期限劳动合同" in normalized_answer
-            or "签订无固定期限劳动合同" in normalized_answer
-        )
-        and not (
-            "是否" in normalized_answer
-            or "尚未确认" in normalized_answer
-            or "不能证明" in normalized_answer
-            or "无法确认" in normalized_answer
-            or "不能直接证明" in normalized_answer
-            or "未明确" in normalized_answer
-            or "未知" in normalized_answer
-        )
-    )
-
-    return (
-        not any(pattern in answer for pattern in invented_patterns)
-        and not has_wrong_indefinite_condition
-    )
 
 
 def validate_user_facts(
@@ -860,61 +789,5 @@ def validate_user_facts(
 
             if pattern in normalized_answer:
                 return False
-
-    return True
-
-
-def validate_three_contract_fact(
-    answer: str,
-    decision: Dict[str, Any],
-) -> bool:
-    """
-    V6.0-13 三次固定期限合同专项验证。
-
-    “连续签订三次固定期限劳动合同”是用户事实。
-    “连续订立二次固定期限劳动合同”可以合法地出现在法律规则
-    或满足条件的表达中，但不能被当成用户事实的替换。
-
-    因此本函数只拦截明确把“公司/用户三次事实”改写成“公司/用户二次
-    事实”的表达，不再错误禁止法律条件中正常出现“二次”。
-    """
-
-    facts = ensure_list(
-        decision.get(
-            "user_facts",
-            [],
-        )
-    )
-
-    fact_text = "；".join(
-        normalize_text(item)
-        for item in facts
-    )
-
-    has_three_fact = (
-        "三次" in fact_text
-        and "固定期限劳动合同" in fact_text
-    )
-
-    if not has_three_fact:
-        return True
-
-    if "三次" not in answer:
-        return False
-
-    wrong_fact_patterns = [
-        "用户连续签订二次固定期限劳动合同",
-        "用户连续订立二次固定期限劳动合同",
-        "公司连续签订二次固定期限劳动合同",
-        "公司连续订立二次固定期限劳动合同",
-        "用户事实是二次固定期限劳动合同",
-        "用户事实为二次固定期限劳动合同",
-        "用户实际签订二次固定期限劳动合同",
-        "公司实际签订二次固定期限劳动合同",
-    ]
-
-    for pattern in wrong_fact_patterns:
-        if pattern in answer:
-            return False
 
     return True

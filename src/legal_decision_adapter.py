@@ -59,6 +59,9 @@ from src.legal_constants import (
     REQUIRED,
     EXCLUSION,
     EXCEPTION,
+    SATISFIED,
+    NOT_SATISFIED,
+    UNKNOWN,
 )
 
 from typing import Any, Dict, List
@@ -253,214 +256,138 @@ def build_fact_condition_mappings(
     rules: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     """
-    V6.1：Fact-to-Condition Mapping + Rule Dependency。
+    V7：Fact → Condition Mapping Formatter。
 
-    核心原则：
+    本函数只负责：
 
-    1. Legal Decision Engine 是唯一的事实抽取与法律条件判断来源。
-    2. Adapter 不再重新扫描 question。
-    3. Adapter 直接读取 DecisionResult.contract_sequence。
-    4. “连续签订三次固定期限劳动合同”只能用于证明
-       “连续订立二次固定期限劳动合同”的数量门槛。
-    5. 不得由“三次合同”推导：
-           - 续订劳动合同
-           - 劳动者提出或者同意续订、订立劳动合同
-           - 不存在第三十九条情形
-           - 不存在第四十条第一、二项情形
-           - 劳动者未提出订立固定期限劳动合同
-    6. Mapping 只记录事实覆盖关系，不修改 Decision Engine 状态。
+    1. 读取 Decision Engine 已经产生的 ConditionResult。
+    2. 读取 DecisionResult 中已经存在的结构化事实。
+    3. 将结果格式化为 Prompt 所需的 Fact → Condition Mapping。
 
-    V6.1 数据流：
+    本函数不负责：
 
-        Question
-            ↓
-        extract_legal_facts()
-            ↓
+    - 重新扫描 question
+    - 重新抽取 LegalFacts
+    - 根据 contract_sequence 推导法律条件
+    - 判断 Article 14 条件
+    - 创建新的法律事实
+    - 创建新的 UNKNOWN
+    - 修改 Decision Engine 的 ConditionResult
+
+    V7 数据流：
+
         LegalFacts
+            ↓
+        Decision Engine
+            ↓
+        ConditionResult
             ↓
         DecisionResult
             ↓
         Adapter
             ↓
         Fact → Condition Mapping
+            ↓
+        legal_prompt.py
+
+    Prompt 当前消费的字段保持不变：
+
+        fact
+        condition
+        mapping_type
+        dependency
     """
 
-    # --------------------------------------------------------
-    # 1. 从 DecisionResult 获取 ContractSequence
-    #
-    # Decision Engine 已经完成唯一一次事实抽取。
-    #
-    # Adapter 禁止再次扫描 question。
-    # --------------------------------------------------------
+    if decision is None:
+        return []
 
-    contract_sequence = get_field(
+    condition_results = get_field(
         decision,
-        "contract_sequence",
+        "condition_results",
         None,
     )
 
-    if contract_sequence is None:
+    if not isinstance(condition_results, list):
         return []
 
-    # --------------------------------------------------------
-    # 2. 读取结构化合同序列
-    # --------------------------------------------------------
-
-    count = get_field(
-        contract_sequence,
-        "count",
+    # V7 B-ready Fact Boundary：
+    #
+    # fact_condition_mappings["fact"] 只能表示
+    # DecisionResult 中已经存在的 Explicit Facts。
+    #
+    # 不再使用 contract_sequence 构造新的事实文本。
+    #
+    # contract_sequence 属于结构化派生事实，
+    # 保留在 DecisionResult 中供其他模块使用，
+    # 但不能在 Adapter 层转换成看似用户原话的 fact。
+    explicit_facts = get_field(
+        decision,
+        "explicit_facts",
         None,
     )
 
-    term_type = normalize_text(
-        get_field(
-            contract_sequence,
-            "term_type",
-            "",
+    if isinstance(explicit_facts, list):
+        explicit_fact_texts = [
+            normalize_text(fact)
+            for fact in explicit_facts
+            if normalize_text(fact)
+        ]
+        fact_text = "；".join(
+            dict.fromkeys(explicit_fact_texts)
         )
-    ).lower()
+    else:
+        fact_text = ""
 
-    continuous = get_field(
-        contract_sequence,
-        "continuous",
-        None,
-    )
+    mappings = []
 
-    # --------------------------------------------------------
-    # 3. 数量门槛判断
-    #
-    # 注意：
-    #
-    # 三次固定期限合同
-    #     ↓
-    # 达到“连续订立二次固定期限劳动合同”的数量门槛
-    #
-    # 但不代表：
-    #
-    #     续订已经发生
-    #     劳动者已经同意下一次续订
-    #     排除条件不存在
-    #     例外条件不存在
-    # --------------------------------------------------------
-
-    try:
-        contract_count = int(count)
-    except (TypeError, ValueError):
-        return []
-
-    has_three_contract_fact = (
-        contract_count >= 3
-        and term_type == "fixed"
-        and continuous is True
-    )
-
-    if not has_three_contract_fact:
-        return []
-
-    # --------------------------------------------------------
-    # 4. 从 Structured Rules 中确认目标条件确实存在。
-    #
-    # Adapter 不自行创造 Condition。
-    # --------------------------------------------------------
-
-    normalized_rules = build_rules_from_articles(
-        rules
-    )
-
-    canonical_rule = get_rule(RULE_ID)
-
-    # ========================================================
-    # V6.2：使用 Stable Condition ID 建立语义条件别名
-    #
-    # 条件身份唯一来自 Canonical Rule Registry。
-    #
-    # condition_id：
-    #   机器可识别的稳定条件身份。
-    #
-    # condition：
-    #   对应的法律条件文本，用于现有 Fact → Condition
-    #   Mapping 及 Prompt 展示。
-    #
-    # Adapter 不再通过 canonical_conditions[N] 推导条件身份。
-    # ========================================================
-
-    condition_definitions = canonical_rule[
-        "condition_definitions"
-    ]
-
-    conditions_by_id = {
-        str(item["condition_id"]).strip(): item
-        for item in condition_definitions
-    }
-
-    target_condition = conditions_by_id[
-        "ARTICLE-14-REQUIRED-001"
-    ]["condition"]
-
-    renewal_condition = conditions_by_id[
-        "ARTICLE-14-REQUIRED-003"
-    ]["condition"]
-
-    worker_agreement_condition = conditions_by_id[
-        "ARTICLE-14-REQUIRED-004"
-    ]["condition"]
-
-    article_39_condition = conditions_by_id[
-        "ARTICLE-14-EXCLUSION-001"
-    ]["condition"]
-
-    article_40_1_condition = conditions_by_id[
-        "ARTICLE-14-EXCLUSION-002"
-    ]["condition"]
-
-    article_40_2_condition = conditions_by_id[
-        "ARTICLE-14-EXCLUSION-003"
-    ]["condition"]
-
-    fixed_term_exception_condition = conditions_by_id[
-        "ARTICLE-14-EXCEPTION-001"
-    ]["condition"]
-
-    for rule in normalized_rules:
-
-        conditions = ensure_list(
-            get_rule_value(
-                rule,
-                "conditions",
-                "required_conditions",
+    for result in condition_results:
+        condition = normalize_text(
+            get_field(
+                result,
+                "condition",
+                "",
             )
         )
 
-        for item in conditions:
+        if not condition:
+            continue
 
-            if _condition_text(item) != target_condition:
-                continue
+        status = normalize_text(
+            get_field(
+                result,
+                "status",
+                UNKNOWN,
+            )
+        ).upper()
 
-            return [
-                {
-                    "fact": "公司连续签订三次固定期限劳动合同",
-                    "condition": target_condition,
-                    "mapping_type": "NUMERIC_THRESHOLD",
-                    "dependency": (
-                        "THREE_CONTRACTS_MEET_TWO_CONTRACT_THRESHOLD"
-                    ),
-                    "reason": (
-                        "Decision Engine 的 LegalFacts 已明确记录"
-                        "连续三次固定期限劳动合同；三次已经达到"
-                        "连续订立二次固定期限劳动合同的最低数量门槛。"
-                    ),
-                    "does_not_prove": [
-                        renewal_condition,
-                        worker_agreement_condition,
-                        article_39_condition,
-                        article_40_1_condition,
-                        article_40_2_condition,
-                        fixed_term_exception_condition,
-                    ],
-                }
-            ]
+        reason = normalize_text(
+            get_field(
+                result,
+                "reason",
+                "",
+            )
+        )
 
-    return []
+        if status == SATISFIED:
+            dependency = SATISFIED
+        elif status == NOT_SATISFIED:
+            dependency = NOT_SATISFIED
+        else:
+            dependency = UNKNOWN
+
+        mapping = {
+            "fact": fact_text,
+            "condition": condition,
+            "mapping_type": "CONDITION_RESULT",
+            "dependency": dependency,
+        }
+
+        if reason:
+            mapping["reason"] = reason
+
+        mappings.append(mapping)
+
+    return mappings
 
 def merge_rules_into_decision(
     adapted_decision: Dict[str, Any],

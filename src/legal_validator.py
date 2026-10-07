@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-RAG V6.1
+RAG V7
 Legal Validation Layer
 
 ============================================================
@@ -14,14 +14,13 @@ Legal Validation Layer
 
     1. 答案清洗与结构验证
     2. 用户事实忠实性验证
-    3. Fact → Condition 映射验证
-    4. Decision 与答案一致性验证
-    5. UNKNOWN / CONDITIONAL 安全验证
-    6. 法律条件防臆造验证
-    7. 法律依据与 Citation 验证
-    8. Decision Engine ConditionResult 完整性验证
-    9. Condition Category 完整性验证
-    10. 最终 Validation 与安全 Fallback 调度
+    3. Decision 与答案一致性验证
+    4. UNKNOWN / CONDITIONAL 安全验证
+    5. 法律条件防臆造验证
+    6. 法律依据验证
+    7. Decision Engine ConditionResult 完整性验证
+    8. Condition Category 完整性验证
+    9. 最终 Validation 与安全 Fallback 调度
 
 本模块不负责：
 
@@ -61,9 +60,7 @@ from src.legal_common import (
 )
 
 from src.legal_fact_validator import (
-    validate_fact_condition_mapping,
     validate_user_facts,
-    validate_three_contract_fact,
 )
 
 from src.legal_rule_builder import (
@@ -626,32 +623,7 @@ def final_validation(
             )
 
         # ============================================================
-        # Final Validation 5：三次合同事实
-        # ============================================================
-
-        if not validate_three_contract_fact(
-            text,
-            decision,
-        ):
-            failures.append(
-                "THREE_CONTRACT_FACT"
-            )
-
-        # ============================================================
-        # Final Validation 6：Fact → Condition Mapping
-        # ============================================================
-
-        if not validate_fact_condition_mapping(
-            text,
-            question,
-            decision,
-        ):
-            failures.append(
-                "FACT_CONDITION_MAPPING"
-            )
-
-        # ============================================================
-        # Final Validation 7：禁止制造 UNKNOWN
+        # Final Validation 5：禁止制造 UNKNOWN
         # ============================================================
 
         if not validate_no_manufactured_unknown(
@@ -663,7 +635,7 @@ def final_validation(
             )
 
         # ============================================================
-        # Final Validation 8：禁止发明法律条件
+        # Final Validation 6：禁止发明法律条件
         # ============================================================
 
         if not validate_legal_condition_invention(
@@ -675,7 +647,7 @@ def final_validation(
             )
 
         # ============================================================
-        # Final Validation 9：Conditional 状态
+        # Final Validation 7：Conditional 状态
         # ============================================================
 
         if not validate_conditional_state(
@@ -687,7 +659,7 @@ def final_validation(
             )
 
         # ============================================================
-        # Final Validation 10：UNKNOWN 条件
+        # Final Validation 8：UNKNOWN 条件
         # ============================================================
 
         if not validate_unknown_conditions(
@@ -699,7 +671,7 @@ def final_validation(
             )
 
         # ============================================================
-        # Final Validation 11：法律依据
+        # Final Validation 9：法律依据
         # ============================================================
 
         rules = ensure_list(

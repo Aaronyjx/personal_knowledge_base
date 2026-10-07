@@ -76,6 +76,7 @@ _RUNTIME_RULE_REQUIRED_FIELDS = (
     "exclusion_conditions",
     "exceptions",
     "condition_definitions",
+    "fact_condition_relationships",
 )
 
 
@@ -161,6 +162,21 @@ def canonical_rule_to_runtime_rule(
         ),
         "condition_definitions": deepcopy(
             canonical_rule["condition_definitions"]
+        ),
+        "fact_condition_relationships": deepcopy(
+            canonical_rule["fact_condition_relationships"]
+        ),
+        "legal_obligations": deepcopy(
+            canonical_rule.get(
+                "legal_obligations",
+                [],
+            )
+        ),
+        "legal_consequences": deepcopy(
+            canonical_rule.get(
+                "legal_consequences",
+                [],
+            )
         ),
     }
 
