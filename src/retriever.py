@@ -722,41 +722,51 @@ def build_article_14_rule(
     article: Dict[str, Any],
 ) -> Dict[str, Any]:
     """
-    构造《劳动合同法》第十四条结构化法律规则。
+    构造《劳动合同法》第十四条 Retriever Structured Rule。
 
     ========================================================
-    法律规则结构
+    V7 Canonical Rule Boundary
     ========================================================
 
-    conditions：
+    本函数不重新定义 Article 14 的法律条件。
 
-        1. 连续订立二次固定期限劳动合同
-        2. 续订劳动合同
-        3. 劳动者提出或者同意续订、订立劳动合同
+    以下法律规则字段统一来自 Canonical Rule Definition：
 
-    exclusion_conditions：
+        - conditions
+        - exclusion_conditions
+        - exceptions
+        - legal_obligations
+        - legal_consequences
+        - references
 
-        1. 劳动者存在第三十九条规定的情形
-        2. 劳动者存在第四十条第一项规定的情形
-        3. 劳动者存在第四十条第二项规定的情形
+    Canonical Rule 唯一来源：
 
-    exceptions：
-
-        劳动者提出订立固定期限劳动合同
-
-    legal_obligations：
-
-        用人单位应当订立无固定期限劳动合同
+        legal_rule_definition.py
+                ↓
+        legal_rule_registry.py
+                ↓
+        get_rule(RULE_ID)
 
     ========================================================
-    重要
+    Retriever 职责
     ========================================================
 
-    这里只建立法律规则。
+    本函数只负责：
 
-    不判断用户是否满足这些条件。
+        1. 构造 Retriever Structured Article
+        2. 注入 Canonical Rule 字段
+        3. 保存 Retriever 层元数据
 
-    用户事实由 Legal Decision Engine 处理。
+    本函数不负责：
+
+        - 重新定义法律条件
+        - LegalFacts
+        - ConditionResult
+        - Rule Decision
+        - 法律事实判断
+        - 法律结论
+
+    用户事实与条件判断由 Legal Decision Engine 处理。
     """
 
     result = copy_article(
@@ -827,13 +837,9 @@ def build_article_14_rule(
         canonical_rule["legal_consequences"]
     )
 
-    result["references"] = [
-        "第十四条",
-        "第三十九条",
-        "第四十条",
-        "第四十条第一项",
-        "第四十条第二项",
-    ]
+    result["references"] = list(
+        canonical_rule["references"]
+    )
 
     result["structured_rule"] = True
 
