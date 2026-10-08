@@ -81,14 +81,6 @@ from src.legal_rule_builder import (
     prioritize_legal_rules,
 )
 
-from src.legal_rule_definition import (
-    RULE_ID,
-)
-
-from src.legal_rule_registry import (
-    get_rule,
-)
-
 from src.legal_answer_builder import (
     safe_text,
 )
