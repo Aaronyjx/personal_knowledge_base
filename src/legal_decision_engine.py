@@ -2083,6 +2083,32 @@ def make_decision(
             ↓
         DecisionResult
 
+    V7 Production Boundary：
+
+        Production Pipeline 应通过：
+
+            Retriever
+                ↓
+            Rule Selector
+                ↓
+            Canonical Rule
+                ↓
+            Runtime Rule Adapter
+                ↓
+            make_decision(rule=runtime_rule)
+
+        因此：
+
+            rule
+                是 V7 Production Runtime Rule 入口。
+
+            retrieved_articles
+                仅作为 Legacy Compatibility 参数保留，
+                用于兼容旧调用方和回归测试。
+
+        Production Pipeline 不应通过
+        retrieved_articles 进行 Rule Selection。
+
     注意：
 
         本函数只进行一次事实抽取。

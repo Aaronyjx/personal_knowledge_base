@@ -10,6 +10,10 @@ from src.legal_fact_models import (
     ContractSequence,
     LegalFacts,
 )
+from src.legal_pipeline import (
+    build_runtime_rule_from_retrieved_articles,
+)
+
 from src.legal_rule_registry import get_rule, register_rule
 from src.legal_rule_selector import select_rule_from_article
 from src.legal_runtime_rule_adapter import (
@@ -234,9 +238,66 @@ def test_selector_adapter_chain_is_rule_agnostic() -> None:
     assert len(runtime_rule["exceptions"]) == 1
 
 
-def test_production_select_core_rule_uses_selector_and_adapter() -> None:
+def test_pipeline_production_rule_selection_uses_selector_and_adapter() -> None:
     """
-    验证生产 Decision Engine 的 select_core_rule()
+    验证 V7 Pipeline Production Rule Selection Boundary。
+
+    数据流：
+
+        Retriever-like Article
+                ↓
+        build_runtime_rule_from_retrieved_articles()
+                ↓
+        Production Rule Selector
+                ↓
+        Canonical Rule
+                ↓
+        Runtime Rule Adapter
+                ↓
+        Runtime Rule
+
+    本测试验证真正的 Production Pipeline Boundary。
+
+    不通过 Decision Engine 的 legacy
+    select_core_rule() 进行 Rule Selection。
+    """
+
+    register_test_rule()
+
+    retrieved_articles = [
+        {
+            "law_name": TEST_LAW_NAME,
+            "article_number": TEST_ARTICLE,
+            "title": TEST_ARTICLE,
+        }
+    ]
+
+    runtime_rule = build_runtime_rule_from_retrieved_articles(
+        retrieved_articles
+    )
+
+    assert runtime_rule["rule_id"] == TEST_RULE_ID
+    assert runtime_rule["law_name"] == TEST_LAW_NAME
+    assert runtime_rule["article"] == TEST_ARTICLE
+
+    assert runtime_rule["conditions"] == [
+        "测试必要条件",
+    ]
+
+    assert runtime_rule["exclusion_conditions"] == [
+        "测试排除条件",
+    ]
+
+    assert runtime_rule["exceptions"] == [
+        "测试例外条件",
+    ]
+
+    assert len(runtime_rule["condition_definitions"]) == 3
+
+
+def test_legacy_select_core_rule_uses_selector_and_adapter() -> None:
+    """
+    验证 Legacy Compatibility 的 select_core_rule()
     可以处理非 Article 14 的 Canonical Rule。
 
     数据流：
@@ -244,6 +305,23 @@ def test_production_select_core_rule_uses_selector_and_adapter() -> None:
         Retriever-like Article
                 ↓
         select_core_rule()
+                ↓
+        Production Selector
+                ↓
+        Canonical Rule
+                ↓
+        Runtime Rule Adapter
+                ↓
+        Runtime Rule
+
+    本测试专门保留旧的 select_core_rule()
+    兼容路径，防止 Legacy API 回归。
+
+    V7 Production 已经改为：
+
+        Retriever-like Article
+                ↓
+        build_runtime_rule_from_retrieved_articles()
                 ↓
         Production Selector
                 ↓
