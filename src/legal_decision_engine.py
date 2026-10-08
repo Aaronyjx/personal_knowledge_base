@@ -194,7 +194,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from src.legal_common import (
     normalize_text,
-    contains_any,
     unique_texts,
 )
 
@@ -210,9 +209,6 @@ from src.legal_runtime_rule_adapter import (
     canonical_rule_to_runtime_rule,
 )
 
-from src.legal_rule_registry import (
-    get_rule,
-)
 
 
 from src.legal_fact_models import (
@@ -226,9 +222,6 @@ from src.legal_fact_extractor import (
     extract_contract_sequence,
 )
 
-from src.legal_fact_renewal import (
-    has_completed_renewal,
-)
 
 
 
