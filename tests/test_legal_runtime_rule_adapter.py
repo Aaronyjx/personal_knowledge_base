@@ -10,9 +10,9 @@ from src.legal_rule_registry import (
 from src.legal_rule_definition import RULE_ID
 
 
-TEST_LAW_NAME = "V6.2 测试法律"
+TEST_LAW_NAME = "V6.2 Runtime Adapter 测试法律"
 TEST_ARTICLE_99 = "第九十九条"
-TEST_RULE_ID = "RULE-TEST-002"
+TEST_RULE_ID = "RULE-TEST-002-ADAPTER"
 
 
 def build_test_canonical_rule() -> Dict[str, Any]:
@@ -54,6 +54,65 @@ def build_test_canonical_rule() -> Dict[str, Any]:
                 "condition_id": "TEST-EXCEPTION-001",
                 "condition": "测试例外条件",
                 "condition_type": "EXCEPTION",
+            },
+        ],
+        "fact_condition_relationships": [
+            {
+                "relationship_id": "TEST-REL-REQUIRED-001",
+                "condition_id": "TEST-REQUIRED-001",
+                "predicate_groups": [
+                    {
+                        "match": "ALL",
+                        "predicates": [
+                            {
+                                "fact_key": "test.required",
+                                "operator": "==",
+                                "value": True,
+                            }
+                        ],
+                    }
+                ],
+                "relationship_type": "PROVES_TRUE",
+                "result_status": "SATISFIED",
+                "reason": "测试事实可以证明测试必要条件。",
+            },
+            {
+                "relationship_id": "TEST-REL-EXCLUSION-001",
+                "condition_id": "TEST-EXCLUSION-001",
+                "predicate_groups": [
+                    {
+                        "match": "ALL",
+                        "predicates": [
+                            {
+                                "fact_key": "test.exclusion",
+                                "operator": "==",
+                                "value": True,
+                            }
+                        ],
+                    }
+                ],
+                "relationship_type": "PROVES_TRUE",
+                "result_status": "SATISFIED",
+                "reason": "测试事实可以证明测试排除条件。",
+            },
+            {
+                "relationship_id": "TEST-REL-EXCEPTION-001",
+                "condition_id": "TEST-EXCEPTION-001",
+                "predicate_groups": [
+                    {
+                        "match": "ALL",
+                        "predicates": [
+                            {
+                                "fact_key": "test.exception",
+                                "operator": "==",
+                                "value": True,
+                            }
+                        ],
+                    }
+                ],
+                "relationship_type": "PROVES_TRUE",
+                "result_status": "SATISFIED",
+                "reason": "测试事实可以证明测试例外条件。",
             },
         ],
         "legal_obligations": [

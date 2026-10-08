@@ -86,7 +86,7 @@ ARTICLE_82 = "第八十二条"
 
 TEST_LAW_NAME = "V6.2 测试法律"
 TEST_ARTICLE_99 = "第九十九条"
-TEST_RULE_ID = "RULE-TEST-002"
+TEST_RULE_ID = "RULE-TEST-002-LOOKUP"
 
 
 def test_article_14_finds_rule_001() -> None:
@@ -174,7 +174,7 @@ def test_lookup_supports_runtime_registered_rule() -> None:
     """
     验证 Article Lookup 真正支持多 Rule。
 
-    注册一个临时的 RULE-TEST-002：
+    注册一个临时的 RULE-TEST-002-LOOKUP：
 
         V6.2 测试法律 + 第九十九条
 
@@ -184,7 +184,7 @@ def test_lookup_supports_runtime_registered_rule() -> None:
               ↓
         find_rule_by_article()
               ↓
-        RULE-TEST-002
+        RULE-TEST-002-LOOKUP
 
     本测试不能依赖 RULE-001 / Article 14。
     """
@@ -195,14 +195,14 @@ def test_lookup_supports_runtime_registered_rule() -> None:
         "article_number": TEST_ARTICLE_99,
         "rule_name": "V6.2 临时测试规则",
         "conditions": [
-            "测试条件",
+            "测试条件一",
         ],
         "exclusion_conditions": [],
         "exceptions": [],
         "condition_definitions": [
             {
                 "condition_id": "TEST-REQUIRED-001",
-                "condition": "测试条件",
+                "condition": "测试条件一",
                 "condition_type": "REQUIRED",
             },
         ],
@@ -253,7 +253,7 @@ def test_runtime_registered_rule_isolated() -> None:
 
     assert current is not None
     assert current["conditions"] == [
-        "测试条件",
+        "测试条件一",
     ]
 
 
@@ -306,7 +306,7 @@ def main() -> None:
 
     test_lookup_supports_runtime_registered_rule()
     print(
-        "PASS: Runtime RULE-TEST-002 → Article Lookup"
+        "PASS: Runtime RULE-TEST-002-LOOKUP → Article Lookup"
     )
 
     test_runtime_registered_rule_isolated()

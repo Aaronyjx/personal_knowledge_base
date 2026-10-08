@@ -2063,6 +2063,7 @@ def build_decision_explanation(
 
 def make_decision(
     question: str,
+    rule: Optional[Dict[str, Any]] = None,
     retrieved_articles: Optional[
         List[Dict[str, Any]]
     ] = None,
@@ -2127,9 +2128,12 @@ def make_decision(
     # Core Rule
     # --------------------------------------------------------
 
-    core_rule = select_core_rule(
-        retrieved_articles
-    )
+    if rule is not None:
+        runtime_rule = rule
+    else:
+        runtime_rule = select_core_rule(
+            retrieved_articles
+        )
 
     # --------------------------------------------------------
     # Decision Engine
@@ -2147,7 +2151,7 @@ def make_decision(
         condition_results,
     ) = evaluate_rule(
         facts=facts,
-        rule=core_rule,
+        rule=runtime_rule,
     )
 
     # --------------------------------------------------------
@@ -2165,7 +2169,7 @@ def make_decision(
 
     dependency = build_rule_dependency(
         condition_results,
-        core_rule,
+        runtime_rule,
     )
 
     # --------------------------------------------------------
@@ -2192,7 +2196,7 @@ def make_decision(
         rule_dependencies=[
             dependency
         ],
-        selected_rule=core_rule,
+        selected_rule=runtime_rule,
         explanation=explanation,
         engine_version=ENGINE_VERSION,
     )
@@ -2203,7 +2207,7 @@ def make_decision(
 
     validate_decision_result(
         result,
-        core_rule,
+        runtime_rule,
     )
 
     return result

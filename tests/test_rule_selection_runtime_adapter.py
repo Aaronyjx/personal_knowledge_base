@@ -69,6 +69,65 @@ def register_test_rule() -> None:
                     "condition_type": "EXCEPTION",
                 },
             ],
+            "fact_condition_relationships": [
+                {
+                    "relationship_id": "TEST-003-REL-REQUIRED-001-001",
+                    "condition_id": "TEST-003-REQUIRED-001",
+                    "predicate_groups": [
+                        {
+                            "match": "ALL",
+                            "predicates": [
+                                {
+                                    "fact_key": "test.required",
+                                    "operator": "==",
+                                    "value": True,
+                                }
+                            ],
+                        }
+                    ],
+                    "relationship_type": "PROVES_TRUE",
+                    "result_status": "SATISFIED",
+                    "reason": "测试事实可以证明测试必要条件。",
+                },
+                {
+                    "relationship_id": "TEST-003-REL-EXCLUSION-001-001",
+                    "condition_id": "TEST-003-EXCLUSION-001",
+                    "predicate_groups": [
+                        {
+                            "match": "ALL",
+                            "predicates": [
+                                {
+                                    "fact_key": "test.exclusion",
+                                    "operator": "==",
+                                    "value": True,
+                                }
+                            ],
+                        }
+                    ],
+                    "relationship_type": "PROVES_TRUE",
+                    "result_status": "SATISFIED",
+                    "reason": "测试事实可以证明测试排除条件。",
+                },
+                {
+                    "relationship_id": "TEST-003-REL-EXCEPTION-001-001",
+                    "condition_id": "TEST-003-EXCEPTION-001",
+                    "predicate_groups": [
+                        {
+                            "match": "ALL",
+                            "predicates": [
+                                {
+                                    "fact_key": "test.exception",
+                                    "operator": "==",
+                                    "value": True,
+                                }
+                            ],
+                        }
+                    ],
+                    "relationship_type": "PROVES_TRUE",
+                    "result_status": "SATISFIED",
+                    "reason": "测试事实可以证明测试例外条件。",
+                },
+            ],
             "legal_obligations": [
                 "测试义务",
             ],
@@ -311,6 +370,37 @@ def test_production_selector_adapter_runtime_execution_chain() -> None:
                     "condition_id": "ARTICLE-14-REQUIRED-001",
                     "condition": "测试必要条件",
                     "condition_type": "REQUIRED",
+                }
+            ],
+            "fact_condition_relationships": [
+                {
+                    "relationship_id": "ARTICLE-14-REL-REQUIRED-001-TEST",
+                    "condition_id": "ARTICLE-14-REQUIRED-001",
+                    "predicate_groups": [
+                        {
+                            "match": "ALL",
+                            "predicates": [
+                                {
+                                    "fact_key": "contract_sequence.count",
+                                    "operator": ">=",
+                                    "value": 2,
+                                },
+                                {
+                                    "fact_key": "contract_sequence.term_type",
+                                    "operator": "==",
+                                    "value": "fixed",
+                                },
+                                {
+                                    "fact_key": "contract_sequence.continuous",
+                                    "operator": "==",
+                                    "value": True,
+                                },
+                            ],
+                        }
+                    ],
+                    "relationship_type": "PROVES_TRUE",
+                    "result_status": "SATISFIED",
+                    "reason": "测试事实满足 ARTICLE-14-REQUIRED-001。",
                 }
             ],
         },

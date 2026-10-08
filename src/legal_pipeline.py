@@ -84,6 +84,19 @@ from src.legal_decision_engine import (
 
 
 # ============================================================
+# V7 Production Rule Selection
+# ============================================================
+
+from src.legal_rule_selector import (
+    select_rule_from_articles,
+)
+
+from src.legal_runtime_rule_adapter import (
+    canonical_rule_to_runtime_rule,
+)
+
+
+# ============================================================
 # Legal Decision Adapter
 # ============================================================
 
@@ -192,6 +205,43 @@ RAG_VERSION = "V6.1"
 # Original Pipeline Functions
 # ============================================================
 
+
+def build_runtime_rule_from_retrieved_articles(
+    rules: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    将 Retriever 返回的 Candidate Rules 转换为
+    Decision Engine 所需的 Runtime Rule。
+
+    V7 Production Boundary：
+
+        Retriever Rules
+            ↓
+        Rule Selector
+            ↓
+        Canonical Rule
+            ↓
+        Runtime Adapter
+            ↓
+        Runtime Rule
+
+    本函数只负责 Rule Selection 与 Runtime Rule 构建。
+    """
+
+    canonical_rule = select_rule_from_articles(
+        rules
+    )
+
+    if canonical_rule is None:
+        raise ValueError(
+            "Retriever Rules 中没有找到对应的 Canonical Rule"
+        )
+
+    return canonical_rule_to_runtime_rule(
+        canonical_rule
+    )
+
+
 def run_decision_engine(
     question: str,
     rules: List[Dict[str, Any]],
@@ -207,9 +257,13 @@ def run_decision_engine(
         f"Rules：{len(rules)}"
     )
 
+    runtime_rule = build_runtime_rule_from_retrieved_articles(
+        rules
+    )
+
     decision = make_decision(
         question=question,
-        retrieved_articles=rules,
+        rule=runtime_rule,
     )
 
     status = extract_engine_decision(

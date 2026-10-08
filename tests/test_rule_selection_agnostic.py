@@ -9,9 +9,9 @@ from src.legal_rule_selector import select_rule_from_article
 LAW_NAME = "中华人民共和国劳动合同法"
 ARTICLE_14 = "第十四条"
 
-TEST_LAW_NAME = "V6.2 测试法律"
+TEST_LAW_NAME = "V6.2 Selector Agnostic 测试法律"
 TEST_ARTICLE_99 = "第九十九条"
-TEST_RULE_ID = "RULE-TEST-002"
+TEST_RULE_ID = "RULE-TEST-002-AGNOSTIC"
 
 
 def register_test_rule() -> None:

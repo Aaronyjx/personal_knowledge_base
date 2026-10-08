@@ -12,9 +12,9 @@ from src.legal_rule_selector import (
 LAW_NAME = "中华人民共和国劳动合同法"
 ARTICLE_14 = "第十四条"
 
-TEST_LAW_NAME = "V6.2 测试法律"
+TEST_LAW_NAME = "V6.2 Production Selector 测试法律"
 TEST_ARTICLE_99 = "第九十九条"
-TEST_RULE_ID = "RULE-TEST-002"
+TEST_RULE_ID = "RULE-TEST-002-SELECTOR"
 
 
 _TEST_RULE_REGISTERED = False
