@@ -368,9 +368,9 @@ def test_legacy_select_core_rule_uses_selector_and_adapter() -> None:
 
 
 
-def test_production_selector_adapter_runtime_execution_chain() -> None:
+def test_legacy_selector_adapter_runtime_execution_chain() -> None:
     """
-    验证 V6.2 完整生产链：
+    验证 Legacy Compatibility 的完整 Selector → Adapter → Runtime Execution 链：
 
         Retriever-like Article
                 ↓
@@ -413,7 +413,7 @@ def test_production_selector_adapter_runtime_execution_chain() -> None:
     ]
 
     # --------------------------------------------------------
-    # Production Rule Selection
+    # Legacy Compatibility Rule Selection
     # --------------------------------------------------------
 
     runtime_rule = select_core_rule(
