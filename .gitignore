@@ -1,6 +1,13 @@
-.DS_Store
-data/
 notebook/
 .ipynb_checkpoints/
 __pycache__/
 *.pyc
+*.bak
+*.bak_*
+*.before_*
+.pytest_cache/
+
+data/*
+!data/legal_registry/
+data/legal_registry/*
+!data/legal_registry/legal_registry.json

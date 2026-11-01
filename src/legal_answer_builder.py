@@ -152,6 +152,7 @@ from src.legal_constants import (
     NOT_ESTABLISHED,
 )
 
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -614,7 +615,7 @@ class StructuredAnswer:
                 self.contract_sequence
             ),
 
-            "selected_rule": self.selected_rule,
+            "selected_rule": deepcopy(self.selected_rule),
 
             "explanation": self.explanation,
 
@@ -705,35 +706,73 @@ def _condition_to_view(
     Builder 只做展示层适配。
     """
 
-    condition_id = safe_text(
-        get_value(
-            condition_result,
-            "condition_id",
-            "",
-        )
+    # 原始身份字段必须严格校验，不允许 safe_text() 修复非法输入。
+    raw_condition_id = get_value(
+        condition_result,
+        "condition_id",
+        None,
     )
 
-    if not condition_id:
+    if (
+        not isinstance(raw_condition_id, str)
+        or not raw_condition_id
+        or raw_condition_id != raw_condition_id.strip()
+    ):
         raise ValueError(
-            "ConditionResult 缺少 condition_id，"
-            "无法构造 V6.2 ConditionView。"
+            f"ConditionResult.condition_id 非法："
+            f"{raw_condition_id!r}"
         )
 
-    condition = safe_text(
-        get_value(
-            condition_result,
-            "condition",
-            "",
-        )
+    condition_id = raw_condition_id
+
+    # 条件文本必须是原始非空字符串，且不得有首尾空白。
+    raw_condition = get_value(
+        condition_result,
+        "condition",
+        None,
     )
 
-    status = safe_text(
-        get_value(
-            condition_result,
-            "status",
+    if (
+        not isinstance(raw_condition, str)
+        or not raw_condition
+        or raw_condition != raw_condition.strip()
+    ):
+        raise ValueError(
+            f"ConditionResult.condition 非法："
+            f"{raw_condition!r}"
+        )
+
+    condition = raw_condition
+
+    # 状态必须由 Decision Engine 明确提供。
+    # 缺失状态不能被静默解释为 UNKNOWN。
+    status_value = get_value(
+        condition_result,
+        "status",
+        None,
+    )
+
+    if status_value is None:
+        raise ValueError(
+            "ConditionResult 缺少 status，"
+            "不能将缺失状态默认转换为 UNKNOWN。"
+        )
+
+    # RAW_STATUS_EXACT_VALIDATION
+    # 必须校验原始值，禁止 safe_text() 将非法状态清洗为合法状态。
+    if (
+        not isinstance(status_value, str)
+        or status_value not in {
+            SATISFIED,
+            NOT_SATISFIED,
             UNKNOWN,
+        }
+    ):
+        raise ValueError(
+            f"ConditionResult.status 非法：{status_value!r}"
         )
-    )
+
+    status = status_value
 
     reason = safe_text(
         get_value(
@@ -743,22 +782,28 @@ def _condition_to_view(
         )
     )
 
-    condition_type = safe_text(
-        get_value(
-            condition_result,
-            "condition_type",
-            "",
-        )
+    # 只在 condition_type 字段确实缺失时兼容旧字段 type。
+    # 显式 None 或其他非法值均不得触发回退。
+    raw_condition_type = _get_raw_condition_type(
+        condition_result
     )
 
-    if not condition_type:
-        condition_type = safe_text(
-            get_value(
-                condition_result,
-                "type",
-                "",
-            )
+    allowed_condition_types = {
+        REQUIRED,
+        EXCLUSION,
+        EXCEPTION,
+    }
+
+    if (
+        not isinstance(raw_condition_type, str)
+        or raw_condition_type not in allowed_condition_types
+    ):
+        raise ValueError(
+            f"ConditionResult.condition_type 非法："
+            f"{raw_condition_type!r}"
         )
+
+    condition_type = raw_condition_type
 
     return ConditionView(
         condition_id=condition_id,
@@ -803,6 +848,40 @@ def _get_condition_results(
 # Condition Classification
 # ============================================================
 
+def _get_raw_condition_type(item: Any) -> Any:
+    """
+    读取原始 condition_type。
+
+    只有 condition_type 字段确实不存在时，才兼容旧字段 type。
+    显式 None、空字符串、非法字符串和非字符串值均原样返回。
+    不执行 strip 或字符串转换。
+    """
+
+    if isinstance(item, dict):
+        if "condition_type" in item:
+            return item["condition_type"]
+        return item.get("type", None)
+
+    try:
+        instance_values = vars(item)
+    except (TypeError, AttributeError):
+        instance_values = {}
+
+    if "condition_type" in instance_values:
+        return instance_values["condition_type"]
+
+    # 支持 property、slot 等未存储在实例字典中的属性。
+    try:
+        value = getattr(item, "condition_type")
+    except AttributeError:
+        return get_value(item, "type", None)
+    except Exception:
+        # 属性读取异常时，不允许用旧字段掩盖问题。
+        return None
+
+    return value
+
+
 def _classify_conditions(
     condition_results: List[Any],
 ) -> Dict[str, List[Any]]:
@@ -821,27 +900,18 @@ def _classify_conditions(
     }
 
     for item in condition_results:
-        condition_type = safe_text(
-            get_value(
-                item,
-                "condition_type",
-                "",
-            )
-        )
+        condition_type = _get_raw_condition_type(item)
 
-        if not condition_type:
-            condition_type = safe_text(
-                get_value(
-                    item,
-                    "type",
-                    "",
-                )
-            )
+        # 非字符串值和非规范枚举值不得参与合法分类计数。
+        if (
+            not isinstance(condition_type, str)
+            or condition_type not in classified
+        ):
+            continue
 
-        if condition_type in classified:
-            classified[
-                condition_type
-            ].append(item)
+        classified[
+            condition_type
+        ].append(item)
 
     return classified
 
@@ -909,9 +979,17 @@ def _build_contract_sequence(
     decision: Any,
 ) -> Dict[str, Any]:
     """
-    读取 ContractSequence。
+    读取并校验 ContractSequence。
 
-    不重新分析合同次数。
+    不重新分析合同次数，不把非法字段转换成合法值。
+
+    兼容行为：
+        contract_sequence=None -> {}
+
+    字段类型必须严格符合：
+        count      -> int，但不允许 bool
+        term_type  -> str
+        continuous -> bool
     """
 
     sequence = get_value(
@@ -923,42 +1001,50 @@ def _build_contract_sequence(
     if sequence is None:
         return {}
 
+    # 保留原有 dict / 对象读取能力，但两种输入共用相同校验。
     if isinstance(sequence, dict):
-        return {
-            "count": sequence.get(
-                "count",
-                0,
-            ),
-            "term_type": sequence.get(
-                "term_type",
-                "",
-            ),
-            "continuous": sequence.get(
-                "continuous",
-                False,
-            ),
-        }
-
-    return {
-        "count": get_value(
+        count = sequence.get("count", 0)
+        term_type = sequence.get("term_type", "")
+        continuous = sequence.get("continuous", False)
+    else:
+        count = get_value(
             sequence,
             "count",
             0,
-        ),
-        "term_type": safe_text(
-            get_value(
-                sequence,
-                "term_type",
-                "",
-            )
-        ),
-        "continuous": bool(
-            get_value(
-                sequence,
-                "continuous",
-                False,
-            )
-        ),
+        )
+        term_type = get_value(
+            sequence,
+            "term_type",
+            "",
+        )
+        continuous = get_value(
+            sequence,
+            "continuous",
+            False,
+        )
+
+    # 必须使用 type(...) is ...，避免 bool 被当作 int 接受。
+    if type(count) is not int:
+        raise ValueError(
+            "DecisionResult.contract_sequence.count 必须是 int，"
+            "且不能是 bool。"
+        )
+
+    if type(term_type) is not str:
+        raise ValueError(
+            "DecisionResult.contract_sequence.term_type 必须是 str。"
+        )
+
+    if type(continuous) is not bool:
+        raise ValueError(
+            "DecisionResult.contract_sequence.continuous 必须是 bool。"
+        )
+
+    # 返回新字典。字段均为已校验的标量，避免嵌套可变对象引用泄漏。
+    return {
+        "count": count,
+        "term_type": term_type,
+        "continuous": continuous,
     }
 
 
@@ -1143,7 +1229,7 @@ def validate_decision_result(
 # Condition Structure Validation
 # ============================================================
 
-def validate_condition_structure(
+def _validate_condition_structure_impl(
     decision: Any,
     strict: bool = True,
 ) -> Dict[str, Any]:
@@ -1191,6 +1277,141 @@ def validate_condition_structure(
         "total"
     ]
 
+    # --------------------------------------------------------
+    # Condition ID Integrity
+    # 以 Runtime Rule.condition_definitions 作为唯一映射来源。
+    # --------------------------------------------------------
+
+    selected_rule = get_value(
+        decision,
+        "selected_rule",
+        None,
+    )
+
+    if not isinstance(selected_rule, dict):
+        raise ValueError(
+            "DecisionResult.selected_rule 必须是 Runtime Rule dict。"
+        )
+
+    condition_definitions = selected_rule.get(
+        "condition_definitions"
+    )
+
+    if not isinstance(condition_definitions, list):
+        raise ValueError(
+            "Runtime Rule.condition_definitions 必须是 list。"
+        )
+
+    if not condition_definitions:
+        raise ValueError(
+            "Runtime Rule.condition_definitions 不能为空。"
+        )
+
+    expected_by_id = {}
+    expected_definition_names = set()
+
+    for definition in condition_definitions:
+        if not isinstance(definition, dict):
+            raise ValueError(
+                "Runtime Rule.condition_definitions 元素必须是 dict。"
+            )
+
+        definition_id = definition.get("condition_id")
+        definition_name = definition.get("condition")
+        definition_type = definition.get("condition_type")
+
+        if (
+            not isinstance(definition_id, str)
+            or not definition_id.strip()
+        ):
+            raise ValueError(
+                "Runtime Rule 存在空或非法 condition_id。"
+            )
+
+        if (
+            not isinstance(definition_name, str)
+            or not definition_name.strip()
+        ):
+            raise ValueError(
+                "Runtime Rule 存在空或非法 condition。"
+            )
+
+        if (
+            not isinstance(definition_type, str)
+            or definition_type not in {
+                REQUIRED,
+                EXCLUSION,
+                EXCEPTION,
+            }
+        ):
+            raise ValueError(
+                "Runtime Rule 存在非法 condition_type："
+                f"{definition_type!r}"
+            )
+
+        # condition_id 是机器身份，禁止通过 strip() 静默修复。
+        if definition_id != definition_id.strip():
+            raise ValueError(
+                "Runtime Rule.condition_definitions 的 condition_id "
+                "不能包含首尾空格。"
+            )
+
+        # condition 是规则定义中的法律文本，必须精确匹配规范值。
+        if definition_name != definition_name.strip():
+            raise ValueError(
+                "Runtime Rule.condition_definitions 的 condition "
+                "不能包含首尾空格。"
+            )
+
+        definition_id = definition_id.strip()
+        definition_name = definition_name.strip()
+
+        if definition_id in expected_by_id:
+            raise ValueError(
+                "Runtime Rule 存在重复 condition_id："
+                f"{definition_id}"
+            )
+
+        if definition_name in expected_definition_names:
+            raise ValueError(
+                "Runtime Rule 存在重复 condition："
+                f"{definition_name}"
+            )
+
+        expected_by_id[definition_id] = {
+            "condition": definition_name,
+            "condition_type": definition_type,
+        }
+        expected_definition_names.add(definition_name)
+
+    expected_names_by_type = {
+        REQUIRED: expected_required_conditions,
+        EXCLUSION: expected_exclusion_conditions,
+        EXCEPTION: expected_exception_conditions,
+    }
+
+    for definition_type, expected_names in expected_names_by_type.items():
+        definition_names = {
+            item["condition"]
+            for item in expected_by_id.values()
+            if item["condition_type"] == definition_type
+        }
+
+        if (
+            len(definition_names) != len(expected_names)
+            or definition_names != set(expected_names)
+        ):
+            raise ValueError(
+                "Runtime Rule.condition_definitions 与条件列表不一致："
+                f"{definition_type}"
+            )
+
+    if len(expected_by_id) != expected_total_conditions:
+        raise ValueError(
+            "Runtime Rule.condition_definitions 数量错误："
+            f"{len(expected_by_id)} != {expected_total_conditions}"
+        )
+
     condition_results = _get_condition_results(
         decision
     )
@@ -1212,27 +1433,53 @@ def validate_condition_structure(
     ]
 
     unknown_types = []
+    invalid_condition_types = []
 
-    for item in condition_results:
-        condition_type = safe_text(
-            get_value(
-                item,
-                "condition_type",
-                get_value(
-                    item,
-                    "type",
-                    "",
-                ),
+    allowed_condition_types = {
+        REQUIRED,
+        EXCLUSION,
+        EXCEPTION,
+    }
+
+    for index, item in enumerate(condition_results):
+        raw_condition_type = _get_raw_condition_type(item)
+
+        if (
+            not isinstance(raw_condition_type, str)
+            or raw_condition_type not in allowed_condition_types
+        ):
+            invalid_condition_types.append(
+                f"第 {index + 1} 条条件的原始 condition_type 非法："
+                f"{raw_condition_type!r}"
             )
+
+            if isinstance(raw_condition_type, str):
+                unknown_types.append(raw_condition_type)
+
+
+    # 状态必须使用原始值精确校验，不允许 safe_text() 静默修复。
+    invalid_statuses = []
+
+    allowed_statuses = {
+        SATISFIED,
+        NOT_SATISFIED,
+        UNKNOWN,
+    }
+
+    for index, item in enumerate(condition_results):
+        raw_status = get_value(
+            item,
+            "status",
+            None,
         )
 
-        if condition_type not in {
-            REQUIRED,
-            EXCLUSION,
-            EXCEPTION,
-        }:
-            unknown_types.append(
-                condition_type
+        if (
+            not isinstance(raw_status, str)
+            or raw_status not in allowed_statuses
+        ):
+            invalid_statuses.append(
+                f"第 {index + 1} 条条件的原始 status 非法："
+                f"{raw_status!r}"
             )
 
     all_names = [
@@ -1245,6 +1492,89 @@ def validate_condition_structure(
         )
         for item in condition_results
     ]
+
+    actual_ids = []
+    duplicate_ids = []
+    condition_id_mismatches = []
+    seen_ids = set()
+
+    for index, item in enumerate(condition_results):
+        # condition_id 是机器身份：先检查原始值，不做文本规范化。
+        raw_condition_id = get_value(
+            item,
+            "condition_id",
+            "",
+        )
+
+        condition_id = (
+            raw_condition_id
+            if isinstance(raw_condition_id, str)
+            else ""
+        )
+
+        # 结构校验使用原始字符串，禁止静默清理身份关联字段。
+        raw_condition_name = get_value(
+            item,
+            "condition",
+            "",
+        )
+        condition_name = (
+            raw_condition_name
+            if isinstance(raw_condition_name, str)
+            else safe_text(raw_condition_name)
+        )
+
+        raw_condition_type = _get_raw_condition_type(item)
+        condition_type = (
+            raw_condition_type
+            if isinstance(raw_condition_type, str)
+            else None
+        )
+
+        actual_ids.append(condition_id)
+
+        if not condition_id:
+            condition_id_mismatches.append(
+                f"第 {index + 1} 条条件缺少 condition_id"
+            )
+            continue
+
+        if condition_id in seen_ids:
+            duplicate_ids.append(condition_id)
+        else:
+            seen_ids.add(condition_id)
+
+        expected_definition = expected_by_id.get(
+            condition_id
+        )
+
+        if expected_definition is None:
+            condition_id_mismatches.append(
+                f"未知 condition_id：{condition_id}"
+            )
+            continue
+
+        if condition_name != expected_definition["condition"]:
+            condition_id_mismatches.append(
+                f"{condition_id} 的 condition 不匹配："
+                f"{condition_name!r} != "
+                f"{expected_definition['condition']!r}"
+            )
+
+        if condition_type != expected_definition["condition_type"]:
+            condition_id_mismatches.append(
+                f"{condition_id} 的 condition_type 不匹配："
+                f"{condition_type!r} != "
+                f"{expected_definition['condition_type']!r}"
+            )
+
+    expected_ids = set(expected_by_id)
+    actual_id_set = set(actual_ids)
+
+    for missing_id in sorted(expected_ids - actual_id_set):
+        condition_id_mismatches.append(
+            f"缺少 Runtime Rule 定义的 condition_id：{missing_id}"
+        )
 
     duplicate_names = []
 
@@ -1344,6 +1674,12 @@ def validate_condition_structure(
                 unknown_types
             ),
 
+        "invalid_condition_types":
+            invalid_condition_types,
+
+        "invalid_statuses":
+            invalid_statuses,
+
         "duplicate_conditions":
             unique_strings(
                 duplicate_names
@@ -1361,6 +1697,16 @@ def validate_condition_structure(
         "extra_conditions":
             unique_strings(
                 extra_conditions
+            ),
+
+        "duplicate_condition_ids":
+            unique_strings(
+                duplicate_ids
+            ),
+
+        "condition_id_mismatches":
+            unique_strings(
+                condition_id_mismatches
             ),
     }
 
@@ -1409,11 +1755,25 @@ def validate_condition_structure(
             f"{result['exception']} != {len(expected_exception_conditions)}"
         )
 
+    if result["invalid_condition_types"]:
+        errors.append(
+            "存在非法原始 ConditionResult.condition_type："
+            + "; ".join(result["invalid_condition_types"])
+        )
+
     if result["unknown_types"]:
         errors.append(
             "存在未知 condition_type："
             + ", ".join(
                 result["unknown_types"]
+            )
+        )
+
+    if result["invalid_statuses"]:
+        errors.append(
+            "存在非法 ConditionResult.status："
+            + "; ".join(
+                result["invalid_statuses"]
             )
         )
 
@@ -1457,6 +1817,22 @@ def validate_condition_structure(
             )
         )
 
+    if result["duplicate_condition_ids"]:
+        errors.append(
+            "存在重复 condition_id："
+            + ", ".join(
+                result["duplicate_condition_ids"]
+            )
+        )
+
+    if result["condition_id_mismatches"]:
+        errors.append(
+            "Condition ID 身份映射错误："
+            + "; ".join(
+                result["condition_id_mismatches"]
+            )
+        )
+
     if errors:
         result["valid"] = False
         result["errors"] = errors
@@ -1474,6 +1850,59 @@ def validate_condition_structure(
         result["errors"] = []
 
     return result
+
+
+def validate_condition_structure(
+    decision: Any,
+    strict: bool = True,
+) -> Dict[str, Any]:
+    """
+    校验当前 Runtime Rule 与 ConditionResult 的结构完整性。
+
+    strict=True：
+        保留原有行为，发现无效结构时抛出 ValueError。
+
+    strict=False：
+        返回 valid / errors；包括 Runtime Rule 前置结构
+        无法解析的情况，不将异常误报为校验通过。
+    """
+
+    if strict:
+        return _validate_condition_structure_impl(
+            decision,
+            strict=True,
+        )
+
+    try:
+        return _validate_condition_structure_impl(
+            decision,
+            strict=False,
+        )
+    except (ValueError, TypeError, KeyError, AttributeError) as exc:
+        return {
+            "valid": False,
+            "errors": [
+                f"Runtime Rule / ConditionResult 结构无法完成校验：{exc}"
+            ],
+            "total": 0,
+            "required": 0,
+            "exclusion": 0,
+            "exception": 0,
+            "expected_total": None,
+            "expected_required": None,
+            "expected_exclusion": None,
+            "expected_exception": None,
+            "unknown_types": [],
+            "invalid_condition_types": [],
+            "invalid_statuses": [],
+            "duplicate_conditions": [],
+            "missing_required": [],
+            "missing_exclusion": [],
+            "missing_exception": [],
+            "extra_conditions": [],
+            "duplicate_condition_ids": [],
+            "condition_id_mismatches": [],
+        }
 
 
 # ============================================================
@@ -1531,10 +1960,21 @@ def build_structured_answer(
         decision
     )
 
-    if strict:
-        validate_condition_structure(
-            decision,
-            strict=True,
+    validation_result = validate_condition_structure(
+        decision,
+        strict=strict,
+    )
+
+    if not validation_result["valid"]:
+        errors = validation_result.get("errors", [])
+        error_text = "\n".join(
+            f"  - {error}"
+            for error in errors
+        )
+
+        raise ValueError(
+            "Builder 拒绝构建无效的 ConditionResult 结构：\n"
+            + error_text
         )
 
     condition_results = _get_condition_results(
@@ -1670,7 +2110,7 @@ def build_structured_answer(
 
         contract_sequence=contract_sequence,
 
-        selected_rule=selected_rule,
+        selected_rule=deepcopy(selected_rule),
 
         explanation=explanation,
 

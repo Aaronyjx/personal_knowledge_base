@@ -150,6 +150,32 @@ def test_multiple_articles_selects_registered_rule() -> None:
     assert rule["rule_id"] == TEST_RULE_ID
 
 
+def test_multiple_registered_articles_selects_first_match() -> None:
+    """
+    两个已注册规则同时出现在候选列表中时，
+    验证 Selector 选择列表中的第一个匹配规则。
+    """
+    register_test_rule()
+
+    articles = [
+        {
+            "law_name": TEST_LAW_NAME,
+            "article_number": TEST_ARTICLE_99,
+        },
+        {
+            "law_name": LAW_NAME,
+            "article_number": ARTICLE_14,
+        },
+    ]
+
+    rule = select_rule_from_articles(articles)
+
+    assert rule is not None
+    assert rule["rule_id"] == TEST_RULE_ID
+    assert rule["law_name"] == TEST_LAW_NAME
+    assert rule["article_number"] == TEST_ARTICLE_99
+
+
 def test_multiple_articles_returns_none_when_unregistered() -> None:
     articles = [
         {

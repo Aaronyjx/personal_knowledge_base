@@ -171,6 +171,8 @@ V6.0 Qdrant Interface 修复
 
 from __future__ import annotations
 
+import copy
+
 import re
 
 from copy import deepcopy
@@ -942,13 +944,10 @@ def build_generic_structured_rule(
         )
     )
 
-    result["references"] = (
-        normalize_rule_list(
-            result.get(
-                "references",
-                [],
-            )
-        )
+    # references 是结构化法律引用，不属于普通规则文本。
+    # 保留 dict 字段及嵌套 location，不进行字符串归一化。
+    result["references"] = copy.deepcopy(
+        result.get("references", [])
     )
 
     result["structured_rule"] = bool(
@@ -1087,13 +1086,10 @@ def normalize_structured_rule(
         )
     )
 
-    result["references"] = (
-        normalize_rule_list(
-            result.get(
-                "references",
-                [],
-            )
-        )
+    # references 是结构化法律引用，不属于普通规则文本。
+    # 保留 dict 字段及嵌套 location，不进行字符串归一化。
+    result["references"] = copy.deepcopy(
+        result.get("references", [])
     )
 
     return result
@@ -1481,6 +1477,11 @@ def extract_article_references(
         for item in ensure_list(
             value
         ):
+
+            # 结构化法律引用是 dict，不是法律文本。
+            # 这里只解析字符串，兼容旧格式字符串引用。
+            if not isinstance(item, str):
+                continue
 
             text = normalize_text(
                 item

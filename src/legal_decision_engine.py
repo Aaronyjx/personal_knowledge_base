@@ -177,6 +177,8 @@ V7 Fact → Relationship → Condition 迁移
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 from src.legal_constants import (
     SATISFIED,
     NOT_SATISFIED,
@@ -197,9 +199,6 @@ from src.legal_common import (
     unique_texts,
 )
 
-from src.legal_decision_rules import (
-    build_core_rule,
-)
 
 from src.legal_rule_selector import (
     select_rule_from_articles,
@@ -214,6 +213,7 @@ from src.legal_runtime_rule_adapter import (
 from src.legal_fact_models import (
     ContractSequence,
     LegalFacts,
+    validate_legal_facts_runtime,
 )
 
 from src.legal_fact_extractor import (
@@ -445,6 +445,9 @@ class DecisionResult:
 
     engine_version: str = ENGINE_VERSION
 
+    # 决策创建时记录的规则身份；不加入 to_dict() 输出。
+    selected_rule_id: Optional[str] = None
+
     @property
     def satisfied_conditions(self) -> List[str]:
         """
@@ -626,7 +629,7 @@ class DecisionResult:
                 for item in self.rule_dependencies
             ],
 
-            "selected_rule": self.selected_rule,
+            "selected_rule": deepcopy(self.selected_rule),
 
             "explanation": self.explanation,
 
@@ -1047,144 +1050,94 @@ def _evaluate_condition_from_relationships(
     relationships: List[Dict[str, Any]],
 ) -> Tuple[str, str]:
     """
-    根据 Canonical Relationships 计算：
-
-        status
-        reason
+    根据当前条件的全部命中 Relationship 计算结果。
 
     语义：
+        PROVES_TRUE     -> SATISFIED
+        PROVES_FALSE    -> NOT_SATISFIED
+        DOES_NOT_PROVE  -> UNKNOWN
 
-        PROVES_TRUE
-            → SATISFIED
-
-        PROVES_FALSE
-            → NOT_SATISFIED
-
-        DOES_NOT_PROVE
-            → UNKNOWN
-
-    Relationship 之间：
-
-        任一 Relationship 命中
-            → 使用该 Relationship 的结果。
-
-    如果没有任何 Relationship 命中：
-
-        → UNKNOWN
+    多条关系命中时：
+        - 结果状态一致：允许，使用第一条命中的解释。
+        - 结果状态冲突：抛出 ValueError。
+        - 没有关系命中：返回 UNKNOWN。
     """
 
-    matched_relationships = (
-        _get_condition_relationships(
-            relationships,
-            condition_id,
-        )
+    matched_relationships = _get_condition_relationships(
+        relationships,
+        condition_id,
     )
+
+    status_by_type = {
+        "PROVES_TRUE": SATISFIED,
+        "PROVES_FALSE": NOT_SATISFIED,
+        "DOES_NOT_PROVE": UNKNOWN,
+    }
+
+    matched_results = []
 
     for relationship in matched_relationships:
+        relationship_type = relationship.get("relationship_type")
+        result_status = relationship.get("result_status")
 
-        relationship_type = relationship.get(
-            "relationship_type"
-        )
-
-        result_status = relationship.get(
-            "result_status"
-        )
-
-        if relationship_type == "PROVES_TRUE":
-
-            if result_status != SATISFIED:
-                raise ValueError(
-                    "Canonical Relationship 语义不一致："
-                    f"relationship_id="
-                    f"{relationship.get('relationship_id')}"
-                    f"\nrelationship_type="
-                    f"{relationship_type}"
-                    f"\nresult_status="
-                    f"{result_status}"
-                )
-
-            if _evaluate_relationship(
-                facts,
-                relationship,
-            ):
-
-                return (
-                    SATISFIED,
-                    str(
-                        relationship.get(
-                            "reason",
-                            "",
-                        )
-                    ),
-                )
-
-        elif relationship_type == "PROVES_FALSE":
-
-            if result_status != NOT_SATISFIED:
-                raise ValueError(
-                    "Canonical Relationship 语义不一致："
-                    f"relationship_id="
-                    f"{relationship.get('relationship_id')}"
-                    f"\nrelationship_type="
-                    f"{relationship_type}"
-                    f"\nresult_status="
-                    f"{result_status}"
-                )
-
-            if _evaluate_relationship(
-                facts,
-                relationship,
-            ):
-
-                return (
-                    NOT_SATISFIED,
-                    str(
-                        relationship.get(
-                            "reason",
-                            "",
-                        )
-                    ),
-                )
-
-        elif relationship_type == "DOES_NOT_PROVE":
-
-            if result_status != UNKNOWN:
-                raise ValueError(
-                    "Canonical Relationship 语义不一致："
-                    f"relationship_id="
-                    f"{relationship.get('relationship_id')}"
-                    f"\nrelationship_type="
-                    f"{relationship_type}"
-                    f"\nresult_status="
-                    f"{result_status}"
-                )
-
-            if _evaluate_relationship(
-                facts,
-                relationship,
-            ):
-
-                return (
-                    UNKNOWN,
-                    str(
-                        relationship.get(
-                            "reason",
-                            "",
-                        )
-                    ),
-                )
-
-        else:
+        if relationship_type not in status_by_type:
             raise ValueError(
                 "Canonical Relationship 使用非法 "
-                "relationship_type："
-                f"{relationship_type}"
+                f"relationship_type：{relationship_type}"
             )
 
-    return (
-        UNKNOWN,
-        "当前事实不足以证明该法律条件。",
-    )
+        expected_status = status_by_type[relationship_type]
+
+        if result_status != expected_status:
+            raise ValueError(
+                "Canonical Relationship 语义不一致："
+                f"relationship_id={relationship.get('relationship_id')}"
+                f"\nrelationship_type={relationship_type}"
+                f"\nresult_status={result_status}"
+                f"\nexpected_status={expected_status}"
+            )
+
+        if _evaluate_relationship(facts, relationship):
+            matched_results.append(
+                (
+                    result_status,
+                    str(relationship.get("reason", "")),
+                    str(relationship.get("relationship_id", "")),
+                )
+            )
+
+    if not matched_results:
+        return (
+            UNKNOWN,
+            "当前事实不足以证明该法律条件。",
+        )
+
+    # UNKNOWN 表示证据不足，不构成反向证据。
+    # 只有命中的确定结论同时包含 SATISFIED 和 NOT_SATISFIED，
+    # 才属于真正的状态冲突。
+    definitive_statuses = {
+        result[0]
+        for result in matched_results
+        if result[0] in {SATISFIED, NOT_SATISFIED}
+    }
+
+    if len(definitive_statuses) > 1:
+        details = "; ".join(
+            f"{relationship_id} -> {status}"
+            for status, _, relationship_id in matched_results
+        )
+        raise ValueError(
+            "Canonical Relationship 命中结果冲突："
+            f"condition_id={condition_id}；{details}"
+        )
+
+    # 优先返回确定结论，避免 UNKNOWN 因 Relationship 顺序而覆盖它。
+    for status, reason, _ in matched_results:
+        if status in {SATISFIED, NOT_SATISFIED}:
+            return status, reason
+
+    # 所有命中结果均为 UNKNOWN。
+    return UNKNOWN, matched_results[0][1]
 
 
 
@@ -1315,6 +1268,74 @@ def validate_condition_structure(
         3. REQUIRED / EXCLUSION / EXCEPTION
            的数量由 Runtime Rule 动态计算。
     """
+
+    # ========================================================
+    # ConditionResult Runtime Type Contract
+    # 必须先校验结果对象和字段类型，再访问字段或进行结构比较。
+    # ========================================================
+
+    if not isinstance(condition_results, list):
+        raise TypeError(
+            "condition_results 必须是 list。"
+        )
+
+    for index, item in enumerate(condition_results):
+        if not isinstance(item, ConditionResult):
+            raise TypeError(
+                "condition_results "
+                f"第 {index + 1} 项必须是 ConditionResult，"
+                f"实际类型为 {type(item).__name__}。"
+            )
+
+        field_types = {
+            "condition_id": item.condition_id,
+            "condition": item.condition,
+            "status": item.status,
+            "reason": item.reason,
+            "condition_type": item.condition_type,
+        }
+
+        for field_name, field_value in field_types.items():
+            if not isinstance(field_value, str):
+                raise TypeError(
+                    f"ConditionResult.{field_name} 必须是字符串："
+                    f"index={index}, "
+                    f"actual_type={type(field_value).__name__}"
+                )
+
+        if not item.condition_id.strip():
+            raise ValueError(
+                "ConditionResult.condition_id 不能为空字符串："
+                f"index={index}"
+            )
+
+        if not item.condition.strip():
+            raise ValueError(
+                "ConditionResult.condition 不能为空字符串："
+                f"condition_id={item.condition_id}"
+            )
+
+        if item.status not in {
+            SATISFIED,
+            NOT_SATISFIED,
+            UNKNOWN,
+        }:
+            raise ValueError(
+                "ConditionResult 存在非法 status："
+                f"condition_id={item.condition_id}, "
+                f"status={item.status!r}"
+            )
+
+        if item.condition_type not in {
+            REQUIRED,
+            EXCLUSION,
+            EXCEPTION,
+        }:
+            raise ValueError(
+                "ConditionResult 存在非法 condition_type："
+                f"condition_id={item.condition_id}, "
+                f"condition_type={item.condition_type!r}"
+            )
 
     if not isinstance(rule, dict):
         raise ValueError(
@@ -1564,6 +1585,432 @@ def validate_condition_structure(
             "condition_definitions 不一致。"
         )
 
+def validate_runtime_rule_relationships(
+    rule: Dict[str, Any],
+) -> None:
+    """
+    验证 Runtime Rule 的通用结构。
+
+    不依赖 Article 14 的固定条件数量或特定条件 ID。
+    """
+
+    if not isinstance(rule, dict):
+        raise ValueError("Runtime Rule 必须是 dict。")
+
+    if "condition_definitions" not in rule:
+        raise ValueError(
+            "Runtime Rule 缺少 condition_definitions。"
+        )
+
+    condition_definitions = rule["condition_definitions"]
+
+    if not isinstance(condition_definitions, list):
+        raise ValueError(
+            "Runtime Rule 的 condition_definitions 必须是 list。"
+        )
+
+    if not condition_definitions:
+        raise ValueError(
+            "Runtime Rule 的 condition_definitions 不能为空。"
+        )
+
+    condition_ids = set()
+
+    valid_condition_types = {
+        "REQUIRED",
+        "EXCLUSION",
+        "EXCEPTION",
+    }
+
+    for definition_index, definition in enumerate(condition_definitions):
+        if not isinstance(definition, dict):
+            raise ValueError(
+                "condition_definitions 中的每一项必须是 dict。"
+            )
+
+        condition_id = definition.get("condition_id")
+        condition = definition.get("condition")
+        condition_type = definition.get("condition_type")
+
+        if not isinstance(condition_id, str) or not condition_id.strip():
+            raise ValueError(
+                "condition_definitions 中存在非法 condition_id。"
+            )
+
+        if not isinstance(condition, str) or not condition.strip():
+            raise ValueError(
+                "condition_definitions 中存在非法 condition："
+                f"index={definition_index}"
+            )
+
+        if (
+            not isinstance(condition_type, str)
+            or condition_type not in valid_condition_types
+        ):
+            raise ValueError(
+                "condition_definitions 中存在非法 condition_type："
+                f"condition_id={condition_id}, "
+                f"condition_type={condition_type!r}"
+            )
+
+        condition_id = condition_id.strip()
+
+        if condition_id in condition_ids:
+            raise ValueError(
+                "Runtime Rule 存在重复 condition_id："
+                f"{condition_id}"
+            )
+
+        condition_ids.add(condition_id)
+
+    if "fact_condition_relationships" not in rule:
+        raise ValueError(
+            "Runtime Rule 缺少 fact_condition_relationships。"
+        )
+
+    relationships = rule["fact_condition_relationships"]
+
+    if not isinstance(relationships, list):
+        raise ValueError(
+            "fact_condition_relationships 必须是 list。"
+        )
+
+    if not relationships:
+        raise ValueError(
+            "fact_condition_relationships 不能为空。"
+        )
+
+    valid_semantics = {
+        "PROVES_TRUE": "SATISFIED",
+        "PROVES_FALSE": "NOT_SATISFIED",
+        "DOES_NOT_PROVE": "UNKNOWN",
+    }
+    valid_operators = {"==", ">="}
+
+    relationship_ids = set()
+    covered_condition_ids = set()
+
+    for relationship in relationships:
+        if not isinstance(relationship, dict):
+            raise ValueError(
+                "fact_condition_relationships 中的每一项必须是 dict。"
+            )
+
+        relationship_id = relationship.get("relationship_id")
+
+        if not isinstance(relationship_id, str) or not relationship_id.strip():
+            raise ValueError(
+                "Relationship 存在非法 relationship_id。"
+            )
+
+        relationship_id = relationship_id.strip()
+
+        if relationship_id in relationship_ids:
+            raise ValueError(
+                "Runtime Rule 存在重复 relationship_id："
+                f"{relationship_id}"
+            )
+
+        relationship_ids.add(relationship_id)
+
+        reason = relationship.get("reason")
+
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError(
+                "Runtime Relationship 的 reason 必须是非空字符串："
+                f"relationship_id={relationship_id}"
+            )
+
+        condition_id = relationship.get("condition_id")
+
+        if not isinstance(condition_id, str) or not condition_id.strip():
+            raise ValueError(
+                "Relationship 存在非法 condition_id："
+                f"{relationship_id}"
+            )
+
+        condition_id = condition_id.strip()
+
+        if condition_id not in condition_ids:
+            raise ValueError(
+                "Relationship 引用了 Runtime Rule 中不存在的 "
+                f"condition_id：{condition_id}"
+            )
+
+        covered_condition_ids.add(condition_id)
+
+        relationship_type = relationship.get("relationship_type")
+        result_status = relationship.get("result_status")
+        expected_status = valid_semantics.get(relationship_type)
+
+        if expected_status is None:
+            raise ValueError(
+                "Relationship 使用非法 relationship_type："
+                f"{relationship_type}"
+            )
+
+        if result_status != expected_status:
+            raise ValueError(
+                "Relationship 类型与结果状态不一致："
+                f"relationship_id={relationship_id}"
+                f"\nrelationship_type={relationship_type}"
+                f"\nresult_status={result_status}"
+                f"\nexpected_status={expected_status}"
+            )
+
+        predicate_groups = relationship.get("predicate_groups")
+
+        if not isinstance(predicate_groups, list) or not predicate_groups:
+            raise ValueError(
+                "Relationship predicate_groups 必须是非空 list："
+                f"{relationship_id}"
+            )
+
+        for group_index, group in enumerate(predicate_groups):
+            if not isinstance(group, dict):
+                raise ValueError(
+                    "Predicate Group 必须是 dict："
+                    f"{relationship_id}[{group_index}]"
+                )
+
+            if group.get("match") != "ALL":
+                raise ValueError(
+                    "Predicate Group 只允许 match='ALL'："
+                    f"{relationship_id}[{group_index}]"
+                )
+
+            predicates = group.get("predicates")
+
+            if not isinstance(predicates, list) or not predicates:
+                raise ValueError(
+                    "Predicate Group 的 predicates 必须是非空 list："
+                    f"{relationship_id}[{group_index}]"
+                )
+
+            for predicate_index, predicate in enumerate(predicates):
+                location = (
+                    f"{relationship_id}"
+                    f"[{group_index}][{predicate_index}]"
+                )
+
+                if not isinstance(predicate, dict):
+                    raise ValueError(
+                        f"Predicate 必须是 dict：{location}"
+                    )
+
+                required_predicate_keys = {
+                    "fact_key",
+                    "operator",
+                    "value",
+                }
+
+                if not required_predicate_keys.issubset(predicate):
+                    raise ValueError(
+                        f"Predicate 缺少必需字段：{location}"
+                    )
+
+                fact_key = predicate.get("fact_key")
+                operator = predicate.get("operator")
+                value = predicate.get("value")
+
+                if not isinstance(fact_key, str) or not fact_key.strip():
+                    raise ValueError(
+                        f"Predicate fact_key 必须是非空字符串：{location}"
+                    )
+
+                if not isinstance(operator, str) or operator not in valid_operators:
+                    raise ValueError(
+                        f"Predicate 使用非法 operator：{location}"
+                    )
+
+                if operator == "==":
+                    value_is_valid = (
+                        type(value) is bool
+                        or (
+                            isinstance(value, str)
+                            and bool(value.strip())
+                        )
+                    )
+                else:
+                    # bool 是 int 的子类，必须排除 True / False。
+                    value_is_valid = type(value) is int
+
+                if not value_is_valid:
+                    raise ValueError(
+                        "Predicate value 与 operator 不匹配："
+                        f"{location}, operator={operator}, "
+                        f"value_type={type(value).__name__}"
+                    )
+
+    missing_condition_ids = condition_ids - covered_condition_ids
+
+    if missing_condition_ids:
+        raise ValueError(
+            "Runtime Rule 存在缺少 Relationship 的条件："
+            + ", ".join(sorted(missing_condition_ids))
+        )
+
+
+def _validate_runtime_fact_paths(
+    facts: LegalFacts,
+    rule: Dict[str, Any],
+) -> None:
+    """
+    根据事实模型的 dataclass 字段声明校验所有 Predicate 路径。
+
+    本函数只验证路径是否存在，不检查事实值是否为 None。
+
+    因此：
+        contract_sequence.count
+            是合法路径。
+
+        contract_sequence=None
+            只表示当前嵌套事实未知，不代表路径无效。
+
+    本函数不依赖 Article 14 的固定字段白名单。
+    """
+
+    from dataclasses import fields, is_dataclass
+    from types import UnionType
+    from typing import Union, get_args, get_origin, get_type_hints
+
+    # 仅接受正式的 LegalFacts 事实模型及其子类。
+    # 不能仅凭输入对象是 dataclass，就允许其进入法律事实判定流程。
+    if not isinstance(facts, LegalFacts):
+        raise ValueError(
+            "Runtime Rule 的 fact_key 路径校验要求事实输入使用 "
+            "LegalFacts 事实模型；"
+            f"actual_type={type(facts).__name__}"
+        )
+
+    model_type = type(facts)
+
+    if not is_dataclass(model_type):
+        raise ValueError(
+            "Runtime Rule 的 fact_key 路径校验要求事实输入使用 "
+            "dataclass 事实模型；"
+            f"actual_type={model_type.__name__}"
+        )
+
+    def unwrap_optional(annotation):
+        """去除 Optional / 单一非 None 联合类型的包装。"""
+        origin = get_origin(annotation)
+
+        if origin in (Union, UnionType):
+            non_none_types = [
+                item
+                for item in get_args(annotation)
+                if item is not type(None)
+            ]
+
+            if len(non_none_types) == 1:
+                return non_none_types[0]
+
+        return annotation
+
+    def validate_path(fact_key, relationship_id, location):
+        """按模型声明逐层校验字段路径。"""
+        parts = fact_key.split(".")
+        current_type = model_type
+
+        for index, part in enumerate(parts):
+            if not is_dataclass(current_type):
+                raise ValueError(
+                    "Runtime Rule 的 fact_key 路径包含无法继续解析的"
+                    "非 dataclass 中间字段："
+                    f"fact_key={fact_key!r}, "
+                    f"relationship_id={relationship_id!r}, "
+                    f"location={location}, "
+                    f"model_type={current_type!r}"
+                )
+
+            declared_fields = {
+                item.name
+                for item in fields(current_type)
+            }
+
+            if part not in declared_fields:
+                raise ValueError(
+                    "Runtime Rule 存在无效 fact_key 字段路径："
+                    f"fact_key={fact_key!r}, "
+                    f"relationship_id={relationship_id!r}, "
+                    f"location={location}, "
+                    f"model_type={current_type.__name__}, "
+                    f"invalid_field={part!r}"
+                )
+
+            if index == len(parts) - 1:
+                return
+
+            type_hints = get_type_hints(current_type)
+            annotation = type_hints.get(part)
+
+            if annotation is None:
+                raise ValueError(
+                    "Runtime Rule 的 fact_key 中间字段缺少类型声明："
+                    f"fact_key={fact_key!r}, "
+                    f"relationship_id={relationship_id!r}, "
+                    f"field={part!r}"
+                )
+
+            current_type = unwrap_optional(annotation)
+
+            if not isinstance(current_type, type):
+                raise ValueError(
+                    "Runtime Rule 的 fact_key 中间字段类型"
+                    "无法用于路径解析："
+                    f"fact_key={fact_key!r}, "
+                    f"relationship_id={relationship_id!r}, "
+                    f"field={part!r}, "
+                    f"annotation={annotation!r}"
+                )
+
+            if not is_dataclass(current_type):
+                raise ValueError(
+                    "Runtime Rule 的 fact_key 中间字段不是"
+                    "可继续解析的 dataclass 模型："
+                    f"fact_key={fact_key!r}, "
+                    f"relationship_id={relationship_id!r}, "
+                    f"field={part!r}, "
+                    f"field_type={current_type.__name__}"
+                )
+
+    relationships = rule["fact_condition_relationships"]
+
+    for relationship in relationships:
+        relationship_id = relationship["relationship_id"]
+
+        for group_index, group in enumerate(
+            relationship["predicate_groups"]
+        ):
+            for predicate_index, predicate in enumerate(
+                group["predicates"]
+            ):
+                raw_fact_key = predicate["fact_key"]
+
+                location = (
+                    f"group_index={group_index}, "
+                    f"predicate_index={predicate_index}"
+                )
+
+                # 严格拒绝前后空格，避免校验路径与执行路径不一致。
+                if raw_fact_key != raw_fact_key.strip():
+                    raise ValueError(
+                        "Runtime Rule 的 fact_key 不允许包含前后空格："
+                        f"fact_key={raw_fact_key!r}, "
+                        f"relationship_id={relationship_id!r}, "
+                        f"location={location}"
+                    )
+
+                fact_key = raw_fact_key
+
+                validate_path(
+                    fact_key=fact_key,
+                    relationship_id=relationship_id,
+                    location=location,
+                )
+
+
 def evaluate_rule(
     facts: LegalFacts,
     rule: Dict[str, Any],
@@ -1609,6 +2056,17 @@ def evaluate_rule(
            且不存在 UNKNOWN
            → DEFINITE
     """
+
+    # Engine 接口先拒绝不属于正式事实模型的输入。
+    if not isinstance(facts, LegalFacts):
+        raise ValueError(
+            "事实输入必须是 LegalFacts 事实模型。"
+        )
+
+    # 对正式事实模型继续执行完整的运行时字段类型校验。
+    validate_legal_facts_runtime(facts)
+    validate_runtime_rule_relationships(rule)
+    _validate_runtime_fact_paths(facts, rule)
 
     condition_results: List[
         ConditionResult
@@ -1679,26 +2137,11 @@ def evaluate_rule(
                 "必须是 dict。"
             )
 
-        condition_id = str(
-            definition.get(
-                "condition_id",
-                "",
-            )
-        ).strip()
-
-        condition = str(
-            definition.get(
-                "condition",
-                "",
-            )
-        ).strip()
-
-        condition_type = str(
-            definition.get(
-                "condition_type",
-                "",
-            )
-        ).strip()
+        # Runtime Rule 已在 evaluate_rule() 入口完成严格类型校验。
+        # 这里仅保留原有的字符串规范化，不再通过 str() 转换非法类型。
+        condition_id = definition["condition_id"].strip()
+        condition = definition["condition"].strip()
+        condition_type = definition["condition_type"].strip()
 
         if not condition_id:
             raise ValueError(
@@ -1859,26 +2302,27 @@ def select_core_rule(
         3. 本函数不根据 Article Number 编写法律规则判断。
         4. 本函数不从 Retriever 条件直接构造 Decision Rule。
 
-    V6.1 compatibility：
+    V7 Compatibility Boundary：
+
+        本函数保留为 Legacy Compatibility API。
 
         如果 Retriever 没有匹配到 Canonical Rule，
-        暂时回退到 build_core_rule()。
+        必须显式抛出 ValueError。
 
-        这样可以保持旧测试和无 Retriever Rule
-        场景的兼容性。
+        不允许在规则选择失败时，
+        静默回退到 Article 14。
+
+        V7 Production Pipeline 使用独立的
+        build_runtime_rule_from_retrieved_articles()
+        完成规则选择与 Runtime Rule 构建。
 
     注意：
 
-        build_core_rule() 仍然保留，
-        但正常生产路径优先使用：
-
-            select_rule_from_articles()
-            →
-            canonical_rule_to_runtime_rule()
+        本函数不再调用 build_core_rule()。
     """
 
     # ========================================================
-    # V6.2 Rule Selection
+    # V7 Legacy Rule Selection Compatibility
     # ========================================================
 
     canonical_rule = select_rule_from_articles(
@@ -1896,10 +2340,12 @@ def select_core_rule(
         )
 
     # ========================================================
-    # V6.1 Compatibility Fallback
+    # V7：显式处理规则选择失败
     # ========================================================
 
-    return build_core_rule()
+    raise ValueError(
+        "Retriever Rules 中没有找到对应的 Canonical Rule"
+    )
 
 # ============================================================
 # Decision Explanation
@@ -2130,6 +2576,9 @@ def make_decision(
         normalized_question
     )
 
+    # 在读取事实字段前检查当前 LegalFacts 的运行时类型。
+    validate_legal_facts_runtime(facts)
+
     # --------------------------------------------------------
     # 从 LegalFacts 获取兼容旧 DecisionResult
     # 字段。
@@ -2218,6 +2667,7 @@ def make_decision(
         selected_rule=runtime_rule,
         explanation=explanation,
         engine_version=ENGINE_VERSION,
+        selected_rule_id=runtime_rule.get("rule_id"),
     )
 
     # --------------------------------------------------------
@@ -2258,6 +2708,53 @@ def validate_decision_result(
         raise TypeError(
             "Decision Engine 输出必须为 DecisionResult。"
         )
+
+    # --------------------------------------------------------
+    # Rule Identity Binding
+    # --------------------------------------------------------
+
+    if not isinstance(rule, dict):
+        raise TypeError(
+            "Decision Engine 校验器的 rule 必须为字典。"
+        )
+
+    if not isinstance(decision.selected_rule, dict):
+        raise TypeError(
+            "DecisionResult.selected_rule 必须为字典。"
+        )
+
+    rule_id = rule.get("rule_id")
+    selected_rule_id = decision.selected_rule.get("rule_id")
+    identity_snapshot = decision.selected_rule_id
+
+    if not isinstance(rule_id, str) or not rule_id.strip():
+        raise ValueError("Runtime Rule 缺少合法的 rule_id。")
+
+    if (
+        not isinstance(selected_rule_id, str)
+        or not selected_rule_id.strip()
+    ):
+        raise ValueError(
+            "DecisionResult.selected_rule 缺少合法的 rule_id。"
+        )
+
+    if (
+        not isinstance(identity_snapshot, str)
+        or not identity_snapshot.strip()
+    ):
+        raise ValueError(
+            "DecisionResult 缺少独立的规则身份快照。"
+        )
+
+    if not (
+        identity_snapshot == rule_id
+        and selected_rule_id == rule_id
+    ):
+        raise ValueError(
+            "DecisionResult.selected_rule、规则身份快照与传入 "
+            "Runtime Rule 的 rule_id 必须完全一致。"
+        )
+
 
     if decision.decision not in {
         DEFINITE,

@@ -108,7 +108,6 @@ from src.legal_decision_engine import (
     DEFINITE,
     CONDITIONAL,
     NOT_ESTABLISHED,
-    build_core_rule,
 )
 
 from src.legal_answer_builder import (
@@ -153,8 +152,14 @@ ARTICLE_39_FACT = (
 
 from src.legal_rule_definition import RULE_ID
 from src.legal_rule_registry import get_rule
+from src.legal_runtime_rule_adapter import (
+    canonical_rule_to_runtime_rule,
+)
 
 _CANONICAL_RULE = get_rule(RULE_ID)
+_RUNTIME_RULE = canonical_rule_to_runtime_rule(
+    _CANONICAL_RULE
+)
 
 
 # ============================================================
@@ -375,7 +380,7 @@ def make_decision_result(
             )
         )
 
-    rule = build_core_rule()
+    rule = _RUNTIME_RULE
 
     dependency = RuleDependency(
         rule_name="劳动合同法第十四条",

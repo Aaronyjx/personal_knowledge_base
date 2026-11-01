@@ -39,8 +39,8 @@ Canonical Legal Rule Registry
               ↓
        Decision Engine
 
-Registry 不复制 Rule 内容，只保存 Canonical Rule Definition
-的引用。
+Registry 在注册时保存 Canonical Rule 的深拷贝，
+并在读取时返回独立副本，避免外部修改污染内部状态。
 ============================================================
 """
 
@@ -52,16 +52,34 @@ from typing import Any, Dict, List
 from src.legal_rule_definition import (
     RULE_ID,
     build_article_14_definition,
+    validate_article_14_definition,
 )
 
 
 # ============================================================
-# Canonical Rule Registry
+# Canonical Rule Registry Initialization
 # ============================================================
 
-_RULE_REGISTRY: Dict[str, Dict[str, Any]] = {
-    RULE_ID: build_article_14_definition(),
-}
+def _build_initial_registry() -> Dict[str, Dict[str, Any]]:
+    """
+    创建并验证内置 Article 14 Canonical Rule。
+
+    验证失败时立即停止初始化，防止无效规则进入 Registry。
+    不影响 register_rule() 对其他规则的通用注册行为。
+    """
+    definition = build_article_14_definition()
+    validation = validate_article_14_definition(definition)
+
+    if validation.get("valid") is not True:
+        raise RuntimeError(
+            "内置 Article 14 Canonical Rule 验证失败："
+            f"{validation!r}"
+        )
+
+    return {RULE_ID: definition}
+
+
+_RULE_REGISTRY: Dict[str, Dict[str, Any]] = _build_initial_registry()
 
 
 # ============================================================
@@ -75,17 +93,20 @@ def register_rule(rule: Dict[str, Any]) -> None:
     rule 必须包含唯一的 rule_id。
     """
 
+    if not isinstance(rule, dict):
+        raise ValueError("Canonical Rule 必须是字典")
+
     rule_id = rule.get("rule_id")
 
-    if not rule_id:
-        raise ValueError("Canonical Rule 缺少 rule_id")
+    if not isinstance(rule_id, str) or not rule_id.strip():
+        raise ValueError("Canonical Rule 的 rule_id 必须是非空字符串")
 
     if rule_id in _RULE_REGISTRY:
         raise ValueError(
             f"Canonical Rule 已经注册：{rule_id}"
         )
 
-    _RULE_REGISTRY[rule_id] = rule
+    _RULE_REGISTRY[rule_id] = deepcopy(rule)
 
 
 def get_rule(rule_id: str) -> Dict[str, Any]:

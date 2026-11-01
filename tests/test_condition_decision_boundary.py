@@ -68,13 +68,18 @@ from src.legal_decision_engine import (
     UNKNOWN,
     NOT_SATISFIED,
     evaluate_rule,
-    build_core_rule,
 )
 
 from src.legal_rule_definition import RULE_ID
 from src.legal_rule_registry import get_rule
+from src.legal_runtime_rule_adapter import (
+    canonical_rule_to_runtime_rule,
+)
 
 _CANONICAL_RULE = get_rule(RULE_ID)
+_RUNTIME_RULE = canonical_rule_to_runtime_rule(
+    _CANONICAL_RULE
+)
 
 
 # ============================================================
@@ -339,7 +344,7 @@ def evaluate_facts(facts):
 
     decision, condition_results = evaluate_rule(
         facts=facts,
-        rule=build_core_rule(),
+        rule=_RUNTIME_RULE,
     )
 
     assert_condition_structure(

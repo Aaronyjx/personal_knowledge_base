@@ -82,6 +82,7 @@ from __future__ import annotations
 from typing import Dict
 
 from src.legal_decision_engine import make_decision
+from src.legal_runtime_rule_adapter import canonical_rule_to_runtime_rule
 
 
 # ============================================================
@@ -92,6 +93,10 @@ from src.legal_rule_definition import RULE_ID
 from src.legal_rule_registry import get_rule
 
 _CANONICAL_RULE = get_rule(RULE_ID)
+
+_RUNTIME_RULE = canonical_rule_to_runtime_rule(
+    _CANONICAL_RULE
+)
 
 
 # ============================================================
@@ -398,7 +403,10 @@ def case_01_three_contracts_only():
         "公司连续签订三次固定期限劳动合同。"
     )
 
-    decision = make_decision(question)
+    decision = make_decision(
+        question=question,
+        rule=_RUNTIME_RULE,
+    )
 
     assert_condition_structure(decision)
     assert_condition_types(decision)
@@ -482,7 +490,10 @@ def case_02_completed_renewal():
         "之后已经续订劳动合同。"
     )
 
-    decision = make_decision(question)
+    decision = make_decision(
+        question=question,
+        rule=_RUNTIME_RULE,
+    )
 
     assert_condition_structure(decision)
     assert_condition_types(decision)
@@ -556,7 +567,10 @@ def case_03_worker_agreement():
         "员工也同意续订劳动合同。"
     )
 
-    decision = make_decision(question)
+    decision = make_decision(
+        question=question,
+        rule=_RUNTIME_RULE,
+    )
 
     assert_condition_structure(decision)
     assert_condition_types(decision)
@@ -631,7 +645,10 @@ def case_04_required_all_satisfied():
         "员工也同意续订劳动合同。"
     )
 
-    decision = make_decision(question)
+    decision = make_decision(
+        question=question,
+        rule=_RUNTIME_RULE,
+    )
 
     assert_condition_structure(decision)
     assert_condition_types(decision)
@@ -684,7 +701,10 @@ def case_05_article_39_triggered():
         "劳动者存在《劳动合同法》第三十九条规定的情形。"
     )
 
-    decision = make_decision(question)
+    decision = make_decision(
+        question=question,
+        rule=_RUNTIME_RULE,
+    )
 
     assert_condition_structure(decision)
     assert_condition_types(decision)
@@ -744,7 +764,10 @@ def case_06_article_40_1_triggered():
         "劳动者存在《劳动合同法》第四十条第一项规定的情形。"
     )
 
-    decision = make_decision(question)
+    decision = make_decision(
+        question=question,
+        rule=_RUNTIME_RULE,
+    )
 
     assert_condition_structure(decision)
     assert_condition_types(decision)
@@ -804,7 +827,10 @@ def case_07_article_40_2_triggered():
         "劳动者存在《劳动合同法》第四十条第二项规定的情形。"
     )
 
-    decision = make_decision(question)
+    decision = make_decision(
+        question=question,
+        rule=_RUNTIME_RULE,
+    )
 
     assert_condition_structure(decision)
     assert_condition_types(decision)
@@ -864,7 +890,10 @@ def case_08_fixed_term_exception():
         "劳动者提出订立固定期限劳动合同。"
     )
 
-    decision = make_decision(question)
+    decision = make_decision(
+        question=question,
+        rule=_RUNTIME_RULE,
+    )
 
     assert_condition_structure(decision)
     assert_condition_types(decision)
@@ -914,7 +943,10 @@ def case_09_no_exclusions():
         "劳动者没有提出订立固定期限劳动合同。"
     )
 
-    decision = make_decision(question)
+    decision = make_decision(
+        question=question,
+        rule=_RUNTIME_RULE,
+    )
 
     assert_condition_structure(decision)
     assert_condition_types(decision)
@@ -965,7 +997,10 @@ def case_10_full_definite():
         "劳动者没有提出订立固定期限劳动合同。"
     )
 
-    decision = make_decision(question)
+    decision = make_decision(
+        question=question,
+        rule=_RUNTIME_RULE,
+    )
 
     assert_condition_structure(decision)
     assert_condition_types(decision)

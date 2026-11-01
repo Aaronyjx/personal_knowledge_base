@@ -83,6 +83,11 @@ from typing import Any, Dict, List
 
 from src.legal_decision_engine import make_decision
 from src.legal_fact_extractor import extract_legal_facts
+from src.legal_rule_definition import RULE_ID
+from src.legal_rule_registry import get_rule
+from src.legal_runtime_rule_adapter import (
+    canonical_rule_to_runtime_rule,
+)
 
 
 # ============================================================
@@ -92,6 +97,12 @@ from src.legal_fact_extractor import extract_legal_facts
 BASELINE_QUESTION = (
     "公司连续签订三次固定期限劳动合同。"
 )
+
+
+def _make_runtime_rule() -> Dict[str, Any]:
+    """从正式 Registry 构建测试用 Runtime Rule。"""
+    canonical_rule = get_rule(RULE_ID)
+    return canonical_rule_to_runtime_rule(canonical_rule)
 
 
 # ============================================================
@@ -436,8 +447,11 @@ def test_case_01_retrieval_cannot_create_legal_facts() -> None:
         _make_adversarial_retrieved_articles()
     )
 
+    runtime_rule = _make_runtime_rule()
+
     decision = make_decision(
         question,
+        rule=runtime_rule,
         retrieved_articles=retrieved_articles,
     )
 
@@ -529,8 +543,11 @@ def test_case_02_retrieved_articles_do_not_change_fact_state() -> None:
     # 不提供 retrieved_articles。
     # --------------------------------------------------------
 
+    runtime_rule = _make_runtime_rule()
+
     baseline_decision = make_decision(
-        question
+        question,
+        rule=runtime_rule,
     )
 
     # --------------------------------------------------------
@@ -540,6 +557,7 @@ def test_case_02_retrieved_articles_do_not_change_fact_state() -> None:
 
     adversarial_decision = make_decision(
         question,
+        rule=runtime_rule,
         retrieved_articles=(
             _make_adversarial_retrieved_articles()
         ),
@@ -772,8 +790,11 @@ def test_case_03_structured_rule_text_is_not_user_fact() -> None:
     # 确认恶意法律材料仍不能改变事实驱动结果。
     # --------------------------------------------------------
 
+    runtime_rule = _make_runtime_rule()
+
     decision = make_decision(
         question,
+        rule=runtime_rule,
         retrieved_articles=retrieved_articles,
     )
 

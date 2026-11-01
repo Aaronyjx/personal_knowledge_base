@@ -571,6 +571,74 @@ def validate_conditional_state(
     return False
 
 
+
+def _find_condition_text_position(
+    line_text: str,
+    condition_text: str,
+    start: int = 0,
+):
+    """
+    在原始文本中查找条件名称，允许条件名称与答案之间存在标点差异。
+
+    返回原始文本中的 (start, end) 偏移量。
+    返回值始终对应原文，而不是去除标点后的文本。
+    """
+
+    # 只忽略条件名称内部的标点。
+    # 保留句号、分号、感叹号和问号，防止跨句段匹配。
+    punctuation_pattern = (
+        r"[，：、（）()【】\[\]“”‘’,:]"
+    )
+
+    target = re.sub(
+        punctuation_pattern,
+        "",
+        normalize_text(condition_text),
+    ).strip()
+
+    if not target:
+        return None
+
+    normalized_chars = []
+    original_positions = []
+
+    for index, char in enumerate(line_text):
+        if re.fullmatch(punctuation_pattern, char):
+            continue
+
+        normalized_chars.append(char)
+        original_positions.append(index)
+
+    normalized_line = "".join(normalized_chars)
+
+    # 将原文搜索起点映射到归一化文本，避免重复匹配前面的内容。
+    normalized_start = 0
+
+    while (
+        normalized_start < len(original_positions)
+        and original_positions[normalized_start] < start
+    ):
+        normalized_start += 1
+
+    match_start = normalized_line.find(
+        target,
+        normalized_start,
+    )
+
+    if match_start < 0:
+        return None
+
+    match_last = match_start + len(target) - 1
+
+    if match_last >= len(original_positions):
+        return None
+
+    original_start = original_positions[match_start]
+    original_end = original_positions[match_last] + 1
+
+    return original_start, original_end
+
+
 def validate_unknown_conditions(
     answer: str,
     decision: Dict[str, Any],
@@ -753,12 +821,9 @@ def validate_unknown_conditions(
         if not condition:
             continue
 
-        fragments = [
-            condition,
-            condition[:16],
-            condition[:12],
-            condition[:8],
-        ]
+        # 只使用完整条件或明确的法律条文标识。
+        # 不使用短前缀，避免不同条件之间发生身份串线。
+        fragments = [condition]
 
         if "第三十九条" in condition:
             fragments.extend([
@@ -779,36 +844,32 @@ def validate_unknown_conditions(
             ])
 
         if "固定期限劳动合同" in condition:
-            fragments.extend([
-                "提出订立固定期限劳动合同",
-            ])
+            fragments.append(
+                "提出订立固定期限劳动合同"
+            )
 
-        fragments = [
+        # 去重并统一文本格式。
+        fragments = list(dict.fromkeys(
             normalize_text(fragment)
             for fragment in fragments
             if normalize_text(fragment)
-        ]
+        ))
 
+        # 只在包含当前条件标识的同一行检查状态表达。
+        # 不把相邻条件、其他章节或“尚未确认条件：无”
+        # 中的 UNKNOWN 词语错误归属于当前条件。
         for fragment in fragments:
+            for answer_line in answer_text.splitlines():
+                normalized_line = normalize_text(answer_line)
 
-            position = answer_text.find(fragment)
+                if fragment not in normalized_line:
+                    continue
 
-            if position < 0:
-                continue
-
-            start = max(0, position - 120)
-            end = min(
-                len(answer_text),
-                position + len(fragment) + 120,
-            )
-
-            local_text = answer_text[start:end]
-
-            if any(
-                pattern in local_text
-                for pattern in reverse_status_patterns
-            ):
-                return False
+                if any(
+                    pattern in normalized_line
+                    for pattern in reverse_status_patterns
+                ):
+                    return False
 
     # 例如：
     #
@@ -854,7 +915,8 @@ def validate_unknown_conditions(
 
         answer_for_unknown_scan = re.sub(
             r"(?:尚未确认条件|未确认条件|未知条件)\s*[：:]\s*"
-            r"(?:[-*•]\s*)?(?:无|没有|None|none|N/A|n/a)\s*[。.]?",
+            r"(?:[-*•]\s*)?(?:无|没有|None|N/A)"
+            r"(?![\u4e00-\u9fffA-Za-z0-9])\s*[。.]?",
             "",
             answer_for_unknown_scan,
             flags=re.IGNORECASE,
@@ -1175,17 +1237,9 @@ def validate_unknown_conditions(
 
         fragments: List[str] = []
 
-        if len(condition_core) >= 4:
-            fragments.append(condition_core)
-
-        if len(condition_core) >= 8:
-            fragments.append(condition_core[:8])
-
-        if len(condition_core) >= 12:
-            fragments.append(condition_core[:12])
-
-        if len(condition_core) >= 16:
-            fragments.append(condition_core[:16])
+        # 条件身份只使用完整条件或明确的法律条文关键词。
+        # 不使用固定长度短前缀，避免不同法律条件发生串线。
+        fragments.append(condition_core)
 
         legal_keywords = [
             "续订劳动合同",
@@ -1244,6 +1298,7 @@ def validate_unknown_conditions(
             "状态为NOT_SATISFIED",
             "状态：NOT_SATISFIED",
             "状态:NOT_SATISFIED",
+            "不满足",
             "不满足条件",
             "不满足该条件",
             "不满足这一条件",
@@ -1298,19 +1353,189 @@ def validate_unknown_conditions(
                 if position < 0:
                     break
 
-                context_start = max(
+                # 以当前条件所在行为基本检查单位，
+                # 不使用固定长度窗口跨越其他条件。
+                line_start = answer_text.rfind(
+                    "\n",
                     0,
-                    position - 100,
+                    position,
+                ) + 1
+
+                line_end = answer_text.find(
+                    "\n",
+                    position,
                 )
 
-                context_end = min(
-                    len(answer_text),
-                    position + len(fragment) + 120,
-                )
+                if line_end < 0:
+                    line_end = len(answer_text)
+
+                # ------------------------------------------------
+                # 将状态检查范围限制在当前条件与相邻条件之间。
+                #
+                # 同一行可能出现多个法律条件，例如：
+                #
+                #   条件 A 已满足；条件 B 尚未确认。
+                #
+                # 不能因为条件 B 的“尚未确认”，就把条件 A
+                # 的“已满足”错误地解释为 UNKNOWN。
+                # ------------------------------------------------
+
+                local_start = line_start
+                local_end = line_end
+
+                current_condition_core = re.sub(
+                    r"[，。；：、（）()【】\[\]“”‘’;,.!?！？]",
+                    "",
+                    normalize_text(condition),
+                ).strip()
+
+                for other_condition in normalized_conditions:
+
+                    other_condition_normalized = normalize_text(
+                        other_condition
+                    )
+
+                    current_condition_normalized = normalize_text(
+                        condition
+                    )
+
+                    if (
+                        other_condition_normalized
+                        == current_condition_normalized
+                    ):
+                        continue
+
+                    other_condition_core = re.sub(
+                        r"[，。；：、（）()【】\[\]“”‘’;,.!?！？]",
+                        "",
+                        other_condition_normalized,
+                    ).strip()
+
+                    if not other_condition_core:
+                        continue
+
+                    # 避免将嵌套或包含关系的条件片段
+                    # 错误地作为不同条件之间的边界。
+                    if (
+                        other_condition_core
+                        in current_condition_core
+                        or current_condition_core
+                        in other_condition_core
+                    ):
+                        continue
+
+                    line_text = answer_text[
+                        line_start:line_end
+                    ]
+
+                    other_search_start = 0
+
+                    while True:
+                        condition_match = (
+                            _find_condition_text_position(
+                                line_text,
+                                other_condition_normalized,
+                                other_search_start,
+                            )
+                        )
+
+                        if condition_match is None:
+                            break
+
+                        other_position, other_end = condition_match
+
+                        other_absolute_start = (
+                            line_start + other_position
+                        )
+
+                        other_absolute_end = (
+                            line_start + other_end
+                        )
+
+                        if other_absolute_end <= position:
+                            # 防止前一个条件的未决状态污染当前条件。
+                            # 将检查起点移动到前一个条件之后最近的句段分隔符后。
+                            separators = ("；", ";", "。", "！", "？", "!", "?", "，", ",")
+                            separator_positions = [
+                                answer_text.rfind(
+                                    separator,
+                                    other_absolute_end,
+                                    position,
+                                )
+                                for separator in separators
+                            ]
+                            separator_positions = [
+                                p for p in separator_positions if p >= 0
+                            ]
+
+                            boundary_end = other_absolute_end
+                            if separator_positions:
+                                boundary_end = max(separator_positions) + 1
+
+                            local_start = max(local_start, boundary_end)
+
+                        elif other_absolute_start >= (
+                            position + len(fragment)
+                        ):
+                            local_end = min(
+                                local_end,
+                                other_absolute_start,
+                            )
+
+                        # 使用原文偏移量继续搜索，兼容标点差异。
+                        other_search_start = other_end
 
                 context = answer_text[
-                    context_start:context_end
+                    local_start:local_end
                 ]
+
+                # 兼容结构化状态标签单独占一行的情况。
+                # 只有相邻行完全符合独立状态标签格式时，
+                # 才将其并入当前条件的检查上下文。
+                standalone_status_pattern = (
+                    r"\s*(?:条件状态|状态)\s*[：:]\s*"
+                    r"(?:NOT_SATISFIED|SATISFIED|UNKNOWN)"
+                    r"\s*[。.]?\s*"
+                )
+
+                neighbor_ranges = []
+
+                if line_start > 0:
+                    previous_end = line_start - 1
+                    previous_start = answer_text.rfind(
+                        "\n",
+                        0,
+                        previous_end,
+                    ) + 1
+                    neighbor_ranges.append(
+                        (previous_start, previous_end)
+                    )
+
+                if line_end < len(answer_text):
+                    next_start = line_end + 1
+                    next_end = answer_text.find(
+                        "\n",
+                        next_start,
+                    )
+
+                    if next_end < 0:
+                        next_end = len(answer_text)
+
+                    neighbor_ranges.append(
+                        (next_start, next_end)
+                    )
+
+                for neighbor_start, neighbor_end in neighbor_ranges:
+                    neighbor_line = answer_text[
+                        neighbor_start:neighbor_end
+                    ]
+
+                    if re.fullmatch(
+                        standalone_status_pattern,
+                        neighbor_line,
+                        flags=re.IGNORECASE,
+                    ):
+                        context += "\n" + neighbor_line
 
                 # ------------------------------------------------
                 # 如果当前局部上下文明确属于 UNKNOWN 表达，
@@ -1329,6 +1554,31 @@ def validate_unknown_conditions(
                     for marker in unresolved_patterns_local
                 )
 
+                # 仅检查当前条件所在句段中的明确状态陈述。
+                # 不把其他条件或相邻句段中的状态词升级为强状态。
+                clause_separators = (
+                    "；", ";", "，", ",", "。", "！", "？",
+                    "!", "?", "\n",
+                )
+
+                clause_end_positions = [
+                    answer_text.find(separator, position)
+                    for separator in clause_separators
+                ]
+                clause_end_positions = [
+                    p for p in clause_end_positions if p >= 0
+                ]
+
+                clause_end = (
+                    min(clause_end_positions)
+                    if clause_end_positions
+                    else len(answer_text)
+                )
+
+                condition_clause = answer_text[
+                    position:min(clause_end, local_end)
+                ]
+
                 # ------------------------------------------------
                 # 明确的结构化状态标签。
                 #
@@ -1344,14 +1594,19 @@ def validate_unknown_conditions(
                 #     条件状态：NOT_SATISFIED
                 # ------------------------------------------------
 
-                explicit_satisfied = any(
-                    pattern in context
-                    for pattern in satisfied_patterns
-                )
-
+                # 先识别 NOT_SATISFIED，避免其子串 SATISFIED
+                # 被误判为肯定状态。
                 explicit_not_satisfied = any(
                     pattern in context
                     for pattern in not_satisfied_patterns
+                )
+
+                explicit_satisfied = (
+                    not explicit_not_satisfied
+                    and any(
+                        pattern in context
+                        for pattern in satisfied_patterns
+                    )
                 )
 
                 # ------------------------------------------------
@@ -1379,16 +1634,32 @@ def validate_unknown_conditions(
                     # 如果同时出现结构化“已满足条件”、
                     # “状态为 SATISFIED”等强状态标签，
                     # 即使附近还有 UNKNOWN，也必须拦截。
-                    strong_satisfied = any(
-                        pattern in context
-                        for pattern in [
-                            SATISFIED,
-                            "状态为SATISFIED",
-                            "状态：SATISFIED",
-                            "已满足条件",
-                            "状态为 SATISFIED",
-                            "条件状态：SATISFIED",
-                        ]
+                    # NOT_SATISFIED 包含 SATISFIED 子串，
+                    # 因此存在明确的不满足状态时，不得判为强肯定状态。
+                    strong_satisfied = (
+                        not explicit_not_satisfied
+                        and (
+                            any(
+                                pattern in context
+                                for pattern in [
+                                    SATISFIED,
+                                    "状态为SATISFIED",
+                                    "状态：SATISFIED",
+                                    "已满足条件",
+                                    "状态为 SATISFIED",
+                                    "条件状态：SATISFIED",
+                                ]
+                            )
+                            or any(
+                                pattern in condition_clause
+                                for pattern in [
+                                    "已满足",
+                                    "该条件成立",
+                                    "条件已经成立",
+                                    "条件已成立",
+                                ]
+                            )
+                        )
                     )
 
                     if strong_satisfied:
@@ -1399,16 +1670,29 @@ def validate_unknown_conditions(
                     if not has_unresolved:
                         return True
 
-                    strong_not_satisfied = any(
-                        pattern in context
-                        for pattern in [
-                            NOT_SATISFIED,
-                            "状态为NOT_SATISFIED",
-                            "状态：NOT_SATISFIED",
-                            "不满足条件",
-                            "状态为 NOT_SATISFIED",
-                            "条件状态：NOT_SATISFIED",
-                        ]
+                    strong_not_satisfied = (
+                        any(
+                            pattern in context
+                            for pattern in [
+                                NOT_SATISFIED,
+                                "状态为NOT_SATISFIED",
+                                "状态：NOT_SATISFIED",
+                                "不满足条件",
+                                "状态为 NOT_SATISFIED",
+                                "条件状态：NOT_SATISFIED",
+                            ]
+                        )
+                        or any(
+                            pattern in condition_clause
+                            for pattern in [
+                                "不满足",
+                                "该条件不成立",
+                                "条件不成立",
+                                "条件未成立",
+                                "未满足该条件",
+                                "未满足这一条件",
+                            ]
+                        )
                     )
 
                     if strong_not_satisfied:
@@ -1493,25 +1777,10 @@ def validate_unknown_conditions(
             fragments.append(condition_core)
 
         # ----------------------------------------------------
-        # 中文条件通常较长。
-        #
-        # 提取前部、中部、后部关键片段。
+        # 不使用固定长度前缀识别长条件。
+        # 仅通过完整条件或下面的明确法律关键词匹配，
+        # 避免不完整前缀被误判为 UNKNOWN 条件已覆盖。
         # ----------------------------------------------------
-
-        if len(condition_core) >= 8:
-            fragments.append(
-                condition_core[:8]
-            )
-
-        if len(condition_core) >= 12:
-            fragments.append(
-                condition_core[:12]
-            )
-
-        if len(condition_core) >= 16:
-            fragments.append(
-                condition_core[:16]
-            )
 
         # ----------------------------------------------------
         # 针对劳动合同法律条件的常见核心短语。
@@ -1580,6 +1849,20 @@ def validate_unknown_conditions(
     # 这样才能真正验证 Engine → Ollama 的 UNKNOWN 保真度。
     # ========================================================
 
+    unresolved_structure_patterns = [
+        "是否存在",
+        "是否具有",
+        "是否符合",
+        "是否属于",
+        "是否满足",
+        "是否发生",
+        "是否具备",
+        "取决于",
+        "有待",
+        "尚需",
+        "仍需",
+    ]
+
     matched_conditions: List[str] = []
 
     for condition in normalized_conditions:
@@ -1588,7 +1871,13 @@ def validate_unknown_conditions(
             condition
         )
 
-        if not fragments:
+        if (
+            not fragments
+            and _find_condition_text_position(
+                answer_text,
+                condition,
+            ) is None
+        ):
             continue
 
         # ----------------------------------------------------
@@ -1599,6 +1888,11 @@ def validate_unknown_conditions(
             fragment in answer_text
             for fragment in fragments
             if len(fragment) >= 8
+        ) or (
+            _find_condition_text_position(
+                answer_text,
+                condition,
+            ) is not None
         )
 
         if condition_mentioned:
@@ -1675,18 +1969,25 @@ def validate_unknown_conditions(
                 ]
             )
 
-        else:
+        elif condition_core == "续订劳动合同":
+            # 这是一个完整的法律条件，而非长条件的短前缀。
             keyword_groups.append(
                 [
-                    condition_core[:6]
+                    condition_core
                 ]
             )
+
+        else:
+            # 没有专用关键词规则时，不使用短前缀推断条件已覆盖。
+            # 空关键词组不会命中，条件将不会计入 matched_conditions。
+            keyword_groups.append([])
 
         group_matched = False
 
         for group in keyword_groups:
 
-            if all(
+            # 空关键词组不能代表条件已覆盖。
+            if group and all(
                 keyword in answer_text
                 for keyword in group
             ):
@@ -1735,154 +2036,234 @@ def validate_unknown_conditions(
     # 所有 UNKNOWN 条件都被明确表达。
     # --------------------------------------------------------
 
+    # 整体 UNKNOWN 声明通过后，跳过逐项状态检查，
+    # 但仍必须执行下方的 Decision → Answer Boundary 校验。
+    explicit_unknown_heading_validated = False
+
     if matched_count == unknown_count:
 
         # ----------------------------------------------------
-        # 如果回答明确出现 UNKNOWN / 未确认语义，
-        # 直接通过。
+        # 路径一：明确的整体 UNKNOWN 声明。
         #
-        # 例如：
+        # 只有明确将整组条件标记为 UNKNOWN / 未确认，
+        # 并且全部条件均已被匹配，才允许整体声明通过。
         #
-        #     其他条件状态为 UNKNOWN：
-        #     - 条件 A
-        #     - 条件 B
-        #     - 条件 C
-        #     - 条件 D
+        # 普通的“仍需结合具体事实判断”不属于整体声明。
         # ----------------------------------------------------
 
-        if has_unresolved_marker:
-            return True
+        explicit_unknown_heading_patterns = [
+            r"(?:以下|上述|这些|所有|全部)?"
+            r"[^。；;\n]{0,24}"
+            r"(?:条件|事项)"
+            r"[^。；;\n]{0,24}"
+            r"(?:均|都|全部|一律)"
+            r"[^。；;\n]{0,16}"
+            r"(?:为\s*UNKNOWN|是\s*UNKNOWN|尚未确认|未确认|未知|未确定)",
 
-        # ----------------------------------------------------
-        # 即使没有出现固定 UNKNOWN 关键词，
-        # 只要每一个 Engine UNKNOWN 条件都被保留，
-        # 并且回答使用明显的未决结构，也允许通过。
-        # ----------------------------------------------------
-
-        unresolved_structure_patterns = [
-            "是否存在",
-            "是否具有",
-            "是否符合",
-            "是否属于",
-            "是否满足",
-            "是否发生",
-            "是否具备",
-            "取决于",
-            "有待",
-            "视",
-            "尚需",
-            "仍需",
-            "待",
+            r"(?:尚未确认|未确认|未知|未确定|UNKNOWN)"
+            r"[^。；;\n]{0,12}"
+            r"(?:条件|事项)"
+            r"\s*[:：]",
         ]
 
-        if any(
-            pattern in answer_text
-            for pattern in unresolved_structure_patterns
+        explicit_unknown_heading = any(
+            __import__("re").search(
+                pattern,
+                answer_text,
+                flags=__import__("re").IGNORECASE,
+            )
+            for pattern in explicit_unknown_heading_patterns
+        )
+
+        if explicit_unknown_heading:
+            # 完整条件清单可以采用整体 UNKNOWN 声明。
+            # 但如果某个条件已经出现独立未决表达，
+            # 就必须继续验证每个条件自己的未决状态。
+            generic_unresolved_patterns = {
+                "最终结论仍取决于",
+                "最终判断仍取决于",
+                "还需结合",
+                "仍需结合",
+                "需要结合其他",
+            }
+
+            individual_unresolved_patterns = [
+                pattern
+                for pattern in unresolved_patterns
+                if pattern not in generic_unresolved_patterns
+            ]
+
+            located_for_heading = []
+
+            for condition in normalized_conditions:
+                position = _find_condition_text_position(
+                    answer_text,
+                    condition,
+                )
+
+                # 整体 UNKNOWN 标题不能用短片段代替完整条件。
+                # 只有完整条件能够定位，才记录为已定位。
+                if position is not None:
+                    located_for_heading.append(
+                        (position[0], position[1], condition)
+                    )
+
+            located_for_heading.sort(key=lambda item: item[0])
+            has_individual_unresolved_marker = False
+
+            for index, (_, condition_end, _) in enumerate(
+                located_for_heading
+            ):
+                segment_end = len(answer_text)
+
+                if index + 1 < len(located_for_heading):
+                    segment_end = min(
+                        segment_end,
+                        located_for_heading[index + 1][0],
+                    )
+
+                for delimiter in (
+                    "。", "；", ";", "！", "？", "!", "?", "\n"
+                ):
+                    boundary = answer_text.find(
+                        delimiter,
+                        condition_end,
+                    )
+
+                    if boundary >= 0:
+                        segment_end = min(segment_end, boundary)
+
+                condition_segment = answer_text[
+                    condition_end:segment_end
+                ]
+
+                if any(
+                    pattern in condition_segment
+                    for pattern in individual_unresolved_patterns
+                ):
+                    has_individual_unresolved_marker = True
+                    break
+
+            # 整体 UNKNOWN 标题不能替代条件本身的可定位性。
+            # 每个 UNKNOWN 条件都必须有独立定位记录。
+            all_conditions_located = (
+                len(located_for_heading) == len(normalized_conditions)
+            )
+
+            # 防止不同条件使用重叠的文本区间完成定位。
+            has_overlapping_condition_positions = any(
+                current[0] < previous[1]
+                for previous, current in zip(
+                    located_for_heading,
+                    located_for_heading[1:],
+                )
+            )
+
+            if (
+                not has_individual_unresolved_marker
+                and all_conditions_located
+                and not has_overlapping_condition_positions
+            ):
+                explicit_unknown_heading_validated = True
+
+    if not explicit_unknown_heading_validated:
+        # ----------------------------------------------------
+        # 路径二：逐项验证每个 UNKNOWN 条件。
+        #
+        # 每个条件都必须能在答案中定位，并在其对应的
+        # 句段中找到未决表达。
+        #
+        # 不允许用其他条件的状态或答案末尾的泛化结论
+        # 代替当前条件自己的状态表达。
+        # ----------------------------------------------------
+
+        generic_unresolved_patterns = {
+            "最终结论仍取决于",
+            "最终判断仍取决于",
+            "还需结合",
+            "仍需结合",
+            "需要结合其他",
+        }
+
+        condition_unresolved_patterns = [
+            pattern
+            for pattern in unresolved_patterns
+            if pattern not in generic_unresolved_patterns
+        ]
+
+        located_conditions = []
+
+        for condition in normalized_conditions:
+
+            position = _find_condition_text_position(
+                answer_text,
+                condition,
+            )
+
+            if position is None:
+                return False
+
+            condition_start, condition_end = position
+
+            located_conditions.append(
+                (condition_start, condition_end, condition)
+            )
+
+        # 按条件在答案中的位置排序。
+        located_conditions.sort(key=lambda item: item[0])
+
+        # 同一个答案位置不能被多个不同条件重复认领。
+        for index in range(1, len(located_conditions)):
+            previous_start, previous_end, previous_condition = (
+                located_conditions[index - 1]
+            )
+            current_start, current_end, current_condition = (
+                located_conditions[index]
+            )
+
+            if current_start < previous_end:
+                # 完全相同的重复条件不应重复计算。
+                if current_condition != previous_condition:
+                    return False
+
+        for index, (condition_start, condition_end, condition) in enumerate(
+            located_conditions
         ):
-            return True
 
-        # ----------------------------------------------------
-        # 如果条件本身全部被保留，但没有任何 UNKNOWN
-        # 语义，也不能贸然认定为 UNKNOWN。
-        # ----------------------------------------------------
+            # 当前条件的状态表达不能越过下一个条件。
+            segment_end = len(answer_text)
 
-        return False
+            for next_start, _, _ in located_conditions[index + 1:]:
+                if next_start > condition_start:
+                    segment_end = next_start
+                    break
 
-    # ========================================================
-    # 第六层：允许少量自然语言改写，但保持严格
-    # ========================================================
-    #
-    # 某些回答可能没有逐项完整复制 Engine 条件，
-    # 而是将多个 UNKNOWN 条件合并描述。
-    #
-    # 如果回答明确声明：
-    #
-    #     其他条件状态为 UNKNOWN
-    #
-    # 且至少有一半 UNKNOWN 条件被明确列出，
-    # 可以认为 UNKNOWN 语义基本被保留。
-    #
-    # 但不能只因为出现一个“尚未确认”就通过。
-    # ========================================================
+            # 同时限制在句段内部。
+            for delimiter in ("。", "；", ";", "！", "？", "!", "?", "\n"):
+                boundary = answer_text.find(delimiter, condition_end)
 
-    if has_unresolved_marker:
+                if boundary >= 0:
+                    segment_end = min(segment_end, boundary)
 
-        # ----------------------------------------------------
-        # 少于 2 个 UNKNOWN 条件时，
-        # 必须至少匹配其中一个。
-        # ----------------------------------------------------
+            condition_segment = answer_text[
+                condition_end:segment_end
+            ]
 
-        if unknown_count == 1:
+            # 泛化的结尾判断不能替代条件自身的状态。
+            if any(
+                pattern in condition_segment
+                for pattern in generic_unresolved_patterns
+            ):
+                condition_segment = ""
 
-            return matched_count == 1
+            if not any(
+                pattern in condition_segment
+                for pattern in condition_unresolved_patterns
+            ):
+                return False
 
-        # ----------------------------------------------------
-        # 多个 UNKNOWN 条件：
-        # 至少覆盖一半。
-        # ----------------------------------------------------
+        # 逐项检查通过后，继续执行下方的边界校验。
 
-        minimum_required = (
-            unknown_count + 1
-        ) // 2
-
-        if matched_count >= minimum_required:
-
-            return True
-
-    # ========================================================
-    # 第七层：结构化 UNKNOWN 表达
-    # ========================================================
-    #
-    # 即使没有出现：
-    #
-    #     尚未确认
-    #     无法确认
-    #     UNKNOWN
-    #
-    # 如果回答明确把条件写成：
-    #
-    #     是否……
-    #     取决于……
-    #     有待……
-    #
-    # 并且覆盖足够多的 Engine UNKNOWN 条件，
-    # 仍然可以通过。
-    # ========================================================
-
-    unresolved_structure_patterns = [
-        "是否存在",
-        "是否具有",
-        "是否符合",
-        "是否属于",
-        "是否满足",
-        "是否发生",
-        "是否具备",
-        "取决于",
-        "有待",
-        "视",
-        "尚需",
-        "仍需",
-        "待",
-    ]
-
-    has_unresolved_structure = any(
-        pattern in answer_text
-        for pattern in unresolved_structure_patterns
-    )
-
-    if has_unresolved_structure:
-
-        if unknown_count == 1:
-            return matched_count == 1
-
-        minimum_required = (
-            unknown_count + 1
-        ) // 2
-
-        if matched_count >= minimum_required:
-            return True
-
-    # ========================================================
     # V6.1 Decision → Answer Boundary
     #
     # LLM 不得制造 Engine 没有提供的 UNKNOWN。
@@ -1928,16 +2309,8 @@ def validate_unknown_conditions(
 
         engine_unknown_fragments.add(condition)
 
-        # 保留已有的条件片段匹配能力
-        engine_unknown_fragments.add(
-            condition[:16]
-        )
-        engine_unknown_fragments.add(
-            condition[:12]
-        )
-        engine_unknown_fragments.add(
-            condition[:8]
-        )
+        # 只使用完整条件建立 UNKNOWN 身份关联。
+        # 固定长度前缀可能把不完整条件错误关联到 UNKNOWN 表达。
 
     # ========================================================
     # 从最终答案中识别 UNKNOWN 表达。
@@ -2001,45 +2374,167 @@ def validate_unknown_conditions(
     # 否则视为 LLM 制造的新 UNKNOWN。
     # ========================================================
 
-    for start, end in answer_unknown_positions:
+    claimed_engine_unknown_fragments = set()
 
-        context_start = max(
-            0,
-            start - 100,
-        )
+    # ========================================================
+    # Decision → Answer Boundary：
+    # 每个 UNKNOWN 表达都必须对应一个 Engine UNKNOWN 条件。
+    # 不再使用前后固定字符窗口进行宽泛匹配。
+    # ========================================================
 
-        context_end = min(
-            len(answer_text),
-            end + 100,
-        )
+    # 定位答案中出现的 Engine UNKNOWN 条件。
+    condition_positions = []
 
-        local_context = answer_text[
-            context_start:context_end
-        ]
-
-        # 如果附近能够找到 Engine UNKNOWN 条件，
-        # 则属于合法 UNKNOWN 表达。
-        matched_engine_unknown = False
-
-        for fragment in engine_unknown_fragments:
-
-            if not fragment:
-                continue
-
-            if fragment in local_context:
-
-                matched_engine_unknown = True
-                break
-
-        if matched_engine_unknown:
+    for fragment in engine_unknown_fragments:
+        if not fragment:
             continue
 
-        # ====================================================
-        # 没有任何 Engine UNKNOWN 条件可以对应。
-        #
-        # 这是 LLM 自行制造 UNKNOWN。
-        # ====================================================
+        position = answer_text.find(fragment)
 
-        return False
+        if position < 0:
+            continue
 
-    return False
+        condition_positions.append(
+            (position, position + len(fragment), fragment)
+        )
+
+    condition_positions.sort(key=lambda item: (item[0], item[1]))
+
+    # 不同条件不能通过重叠的答案文本区间重复完成定位。
+    for previous, current in zip(
+        condition_positions,
+        condition_positions[1:],
+    ):
+        if current[0] < previous[1] and current[2] != previous[2]:
+            return False
+
+    # UNKNOWN 词语可能相互包含，例如“尚未确认”和“未确认”。
+    # 合并重叠的标记区间，避免把同一个表达重复计数。
+    deduplicated_unknown_positions = []
+
+    for marker_start, marker_end in sorted(
+        answer_unknown_positions,
+        key=lambda item: (item[0], -(item[1] - item[0])),
+    ):
+        if (
+            deduplicated_unknown_positions
+            and marker_start < deduplicated_unknown_positions[-1][1]
+        ):
+            continue
+
+        deduplicated_unknown_positions.append(
+            (marker_start, marker_end)
+        )
+
+    # 仅使用句子边界分段，保留逗号等法律分析中常用的内部标点。
+    sentence_separators = (
+        "。", "；", ";", "！", "？", "!", "?", "\n"
+    )
+
+    def find_sentence_bounds(position):
+        left = 0
+        right = len(answer_text)
+
+        for separator in sentence_separators:
+            boundary = answer_text.rfind(separator, 0, position)
+            if boundary >= 0:
+                left = max(left, boundary + len(separator))
+
+        for separator in sentence_separators:
+            boundary = answer_text.find(separator, position)
+            if boundary >= 0:
+                right = min(right, boundary)
+
+        return left, right
+
+    # 只有完整条件清单已通过前置校验时，
+    # 才豁免明确的 UNKNOWN 分类标题。
+    # 必须检查标记所在的整行，不能仅凭后续文本中存在冒号豁免。
+    validated_unknown_category_headings = {
+        "尚未确认的排除条件：",
+        "尚未确认的排除条件:",
+        "尚未确认的例外条件：",
+        "尚未确认的例外条件:",
+        "尚未确认条件：",
+        "尚未确认条件:",
+    }
+
+    for marker_start, marker_end in deduplicated_unknown_positions:
+
+        # 精确豁免表示空列表的标题行；不豁免其他 UNKNOWN 表达。
+        line_start = answer_text.rfind("\n", 0, marker_start) + 1
+        line_end = answer_text.find("\n", marker_end)
+        if line_end < 0:
+            line_end = len(answer_text)
+
+        marker_line = answer_text[line_start:line_end].strip()
+        if marker_line in {
+            "尚未确认条件：无",
+            "尚未确认条件：无。",
+            "尚未确认条件:无",
+            "尚未确认条件:无.",
+        }:
+            continue
+
+        # 只有完整 UNKNOWN 条件清单通过前置校验时，才豁免该概括句。
+        # 不豁免其他 UNKNOWN 表达，避免放宽 Decision → Answer Boundary。
+        if explicit_unknown_heading_validated:
+            summary_start, summary_end = find_sentence_bounds(
+                marker_start
+            )
+            summary_sentence = answer_text[
+                summary_start:summary_end
+            ].strip()
+
+            if summary_sentence == (
+                "但结构化法律规则中仍存在尚未确认的条件，"
+                "因此当前不能将 CONDITIONAL 直接转换为确定性结论"
+            ):
+                continue
+
+        if explicit_unknown_heading_validated:
+            line_start = answer_text.rfind("\n", 0, marker_start) + 1
+            line_end = answer_text.find("\n", marker_end)
+
+            if line_end < 0:
+                line_end = len(answer_text)
+
+            marker_line = answer_text[line_start:line_end].strip()
+
+            if marker_line in validated_unknown_category_headings:
+                continue
+
+        # 找到该 UNKNOWN 表达所在的句子范围。
+        sentence_start, sentence_end = find_sentence_bounds(
+            marker_start
+        )
+
+        # 只允许与同一句内、尚未被其他 UNKNOWN 表达认领的
+        # Engine UNKNOWN 条件建立对应关系。
+        candidates = []
+
+        for condition_start, condition_end, fragment in condition_positions:
+            if fragment in claimed_engine_unknown_fragments:
+                continue
+
+            if (
+                condition_start >= sentence_start
+                and condition_end <= sentence_end
+            ):
+                distance = min(
+                    abs(marker_start - condition_end),
+                    abs(condition_start - marker_end),
+                )
+                candidates.append(
+                    (distance, condition_start, fragment)
+                )
+
+        if not candidates:
+            # 当前 UNKNOWN 表达没有对应的 Engine UNKNOWN 条件。
+            return False
+
+        # 每个条件最多被一个 UNKNOWN 表达认领。
+        candidates.sort(key=lambda item: (item[0], item[1]))
+        claimed_engine_unknown_fragments.add(candidates[0][2])
+
+    return True

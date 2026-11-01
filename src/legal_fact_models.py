@@ -160,6 +160,30 @@ class ContractSequence:
 
     continuous: bool
 
+    def __post_init__(self) -> None:
+        """
+        验证合同序列事实的字段运行时类型。
+
+        注意：
+            这里只验证类型，不推导法律结论，
+            也不限制 count 或 term_type 的业务值域。
+        """
+
+        if type(self.count) is not int:
+            raise TypeError(
+                "ContractSequence.count 必须是 int，且不能是 bool。"
+            )
+
+        if type(self.term_type) is not str:
+            raise TypeError(
+                "ContractSequence.term_type 必须是 str。"
+            )
+
+        if type(self.continuous) is not bool:
+            raise TypeError(
+                "ContractSequence.continuous 必须是 bool。"
+            )
+
     def to_dict(self) -> Dict[str, object]:
         """
         转换为字典。
@@ -403,6 +427,26 @@ class LegalFacts:
         不表示法律上的例外条件已经被 Engine 判定为触发。
     """
 
+    def __post_init__(self) -> None:
+        """
+        验证嵌套的合同序列事实对象。
+
+        LegalFacts 负责确认对象类型；
+        ContractSequence 自身负责验证字段类型。
+        """
+
+        if (
+            self.contract_sequence is not None
+            and not isinstance(
+                self.contract_sequence,
+                ContractSequence,
+            )
+        ):
+            raise TypeError(
+                "LegalFacts.contract_sequence 必须是 "
+                "ContractSequence 实例或 None。"
+            )
+
     # ========================================================
     # Dict Conversion
     # ========================================================
@@ -445,3 +489,80 @@ class LegalFacts:
                 self.fixed_term_exception
             ),
         }
+
+
+# ============================================================
+# LegalFacts Runtime Type Validation
+# ============================================================
+
+def validate_legal_facts_runtime(facts: object) -> None:
+    """
+    验证 LegalFacts 当前实例的运行时字段类型。
+
+    本函数只检查数据结构，不判断法律条件，也不修改事实值。
+
+    contract_sequence=None 和 Optional[bool] 字段的 None
+    都是合法未知状态，必须原样保留。
+    """
+
+    if not isinstance(facts, LegalFacts):
+        raise TypeError(
+            "facts 必须是 LegalFacts 实例。"
+        )
+
+    # 用户明确事实必须是字符串列表。
+    if type(facts.explicit_facts) is not list:
+        raise TypeError(
+            "LegalFacts.explicit_facts 必须是 list[str]。"
+        )
+
+    for index, item in enumerate(facts.explicit_facts):
+        if type(item) is not str:
+            raise TypeError(
+                "LegalFacts.explicit_facts "
+                f"第 {index} 个元素必须是 str。"
+            )
+
+    # 合同序列可以缺失，但不能被替换为任意对象。
+    sequence = facts.contract_sequence
+
+    if sequence is not None:
+        if not isinstance(sequence, ContractSequence):
+            raise TypeError(
+                "LegalFacts.contract_sequence 必须是 "
+                "ContractSequence 实例或 None。"
+            )
+
+        # 重新检查当前值，防止对象创建后的直接赋值绕过校验。
+        if type(sequence.count) is not int:
+            raise TypeError(
+                "ContractSequence.count 必须是 int，且不能是 bool。"
+            )
+
+        if type(sequence.term_type) is not str:
+            raise TypeError(
+                "ContractSequence.term_type 必须是 str。"
+            )
+
+        if type(sequence.continuous) is not bool:
+            raise TypeError(
+                "ContractSequence.continuous 必须是 bool。"
+            )
+
+    # 所有 Optional[bool] 事实只接受 bool 或 None。
+    boolean_fields = (
+        "completed_renewal",
+        "worker_agreement",
+        "article_39",
+        "article_40_1",
+        "article_40_2",
+        "fixed_term_exception",
+    )
+
+    for field_name in boolean_fields:
+        value = getattr(facts, field_name)
+
+        if value is not None and type(value) is not bool:
+            raise TypeError(
+                f"LegalFacts.{field_name} 必须是 bool 或 None。"
+            )

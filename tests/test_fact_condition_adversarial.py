@@ -81,6 +81,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from src.legal_fact_extractor import extract_legal_facts
 from src.legal_decision_engine import make_decision
+from src.legal_runtime_rule_adapter import canonical_rule_to_runtime_rule
 
 
 # ============================================================
@@ -91,6 +92,10 @@ from src.legal_rule_definition import RULE_ID
 from src.legal_rule_registry import get_rule
 
 _CANONICAL_RULE = get_rule(RULE_ID)
+
+_RUNTIME_RULE = canonical_rule_to_runtime_rule(
+    _CANONICAL_RULE
+)
 
 
 # ============================================================
@@ -433,7 +438,10 @@ def test_case_01_three_contracts_not_completed_renewal() -> None:
         "worker_agreement",
     )
 
-    decision = make_decision(question)
+    decision = make_decision(
+        question=question,
+        rule=_RUNTIME_RULE,
+    )
 
     _assert_status(
         decision,
@@ -498,7 +506,10 @@ def test_case_02_agreement_not_completed_renewal() -> None:
         "completed_renewal",
     )
 
-    decision = make_decision(question)
+    decision = make_decision(
+        question=question,
+        rule=_RUNTIME_RULE,
+    )
 
     _assert_status(
         decision,
@@ -555,7 +566,10 @@ def test_case_03_completed_renewal_not_worker_agreement() -> None:
         "worker_agreement",
     )
 
-    decision = make_decision(question)
+    decision = make_decision(
+        question=question,
+        rule=_RUNTIME_RULE,
+    )
 
     _assert_status(
         decision,
@@ -613,7 +627,10 @@ def test_case_04_completed_renewal_does_not_imply_agreement() -> None:
         "worker_agreement",
     )
 
-    decision = make_decision(question)
+    decision = make_decision(
+        question=question,
+        rule=_RUNTIME_RULE,
+    )
 
     _assert_status(
         decision,
@@ -665,7 +682,10 @@ def test_case_05_legal_wording_agreement_not_renewal() -> None:
         "completed_renewal",
     )
 
-    decision = make_decision(question)
+    decision = make_decision(
+        question=question,
+        rule=_RUNTIME_RULE,
+    )
 
     _assert_status(
         decision,
@@ -715,7 +735,10 @@ def test_case_06_article_39_negative_does_not_contaminate_other_exclusions() -> 
         "article_40_2",
     )
 
-    decision = make_decision(question)
+    decision = make_decision(
+        question=question,
+        rule=_RUNTIME_RULE,
+    )
 
     _assert_status(
         decision,
@@ -761,7 +784,10 @@ def test_case_07_single_negative_exclusion_fact_not_definite() -> None:
         "article_39",
     )
 
-    decision = make_decision(question)
+    decision = make_decision(
+        question=question,
+        rule=_RUNTIME_RULE,
+    )
 
     _assert_status(
         decision,
@@ -810,7 +836,10 @@ def test_case_08_unknown_conditions_never_upgrade() -> None:
         "公司连续签订三次固定期限劳动合同。"
     )
 
-    decision = make_decision(question)
+    decision = make_decision(
+        question=question,
+        rule=_RUNTIME_RULE,
+    )
 
     unknown_conditions = [
         REQUIRED_3,

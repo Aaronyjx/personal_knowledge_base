@@ -102,6 +102,8 @@ Structured Article → Legal Rule
 ============================================================
 """
 
+import copy
+
 
 import re
 
@@ -183,6 +185,7 @@ def normalize_rule(article: Any) -> Dict[str, Any]:
             "type",
             "conditions",
             "exceptions",
+            "references",
         ]:
 
             value = get_field(
@@ -277,6 +280,18 @@ def normalize_rule(article: Any) -> Dict[str, Any]:
     # ========================================================
 
     result = dict(source)
+
+    # ========================================================
+    # 结构化法律引用隔离
+    # ========================================================
+
+    # references 是结构化法律引用，不属于普通文本字段。
+    # 只在原始数据提供该字段时进行深拷贝，
+    # 保持 references 的可选字段契约。
+    if "references" in source:
+        result["references"] = copy.deepcopy(
+            source["references"]
+        )
 
     # ========================================================
     # 写入统一字段

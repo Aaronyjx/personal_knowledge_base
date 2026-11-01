@@ -206,3 +206,89 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# ============================================================
+# ConditionResult Runtime Type Boundary Tests
+# ============================================================
+
+import pytest
+from dataclasses import replace
+
+from src.legal_constants import (
+    SATISFIED,
+    NOT_SATISFIED,
+    UNKNOWN,
+    REQUIRED,
+    EXCLUSION,
+    EXCEPTION,
+)
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid_value"),
+    [
+        ("condition_id", 123),
+        ("condition", None),
+        ("condition_type", None),
+        ("status", None),
+        ("status", 123),
+        ("reason", None),
+        ("reason", 123),
+    ],
+)
+def test_condition_result_field_types_are_validated(
+    field,
+    invalid_value,
+):
+    rule = build_test_rule()
+    results = build_test_results()
+
+    results[0] = replace(
+        results[0],
+        **{field: invalid_value},
+    )
+
+    with pytest.raises((TypeError, ValueError)):
+        validate_condition_structure(results, rule)
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        SATISFIED,
+        NOT_SATISFIED,
+        UNKNOWN,
+    ],
+)
+def test_condition_result_accepts_legal_status_values(status):
+    rule = build_test_rule()
+    results = build_test_results()
+
+    results[0] = replace(
+        results[0],
+        status=status,
+    )
+
+    validate_condition_structure(results, rule)
+
+
+def test_condition_result_accepts_empty_reason_string():
+    rule = build_test_rule()
+    results = build_test_results()
+
+    results[0] = replace(
+        results[0],
+        reason="",
+    )
+
+    validate_condition_structure(results, rule)
+
+
+def test_condition_structure_rejects_non_condition_result_object():
+    rule = build_test_rule()
+    results = build_test_results()
+    results[0] = object()
+
+    with pytest.raises((TypeError, ValueError)):
+        validate_condition_structure(results, rule)

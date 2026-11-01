@@ -223,6 +223,10 @@ def build_malicious_answer(
 - 存在后续订立的劳动合同：已满足
 - 续订劳动合同：{renewal_status}
 - 劳动者提出或者同意续订、订立劳动合同：{consent_status}
+- 劳动者存在《劳动合同法》第三十九条规定的情形：未知
+- 劳动者存在《劳动合同法》第四十条第一项规定的情形：未知
+- 劳动者存在《劳动合同法》第四十条第二项规定的情形：未知
+- 劳动者提出订立固定期限劳动合同：未知
 
 【需要注意】
 当前仍需结合具体事实判断是否满足全部法律条件。
@@ -702,11 +706,128 @@ def main():
         "运行 final_validation..."
     )
 
+    # ========================================================
+    # 临时诊断：追踪 UNKNOWN 条件文本边界
+    # 只读取数据，不修改业务对象
+    # ========================================================
+
+    print("\n" + "=" * 90)
+    print("UNKNOWN 条件文本边界诊断")
+    print("=" * 90)
+
+    def diagnostic_read(obj, key, default=None):
+        if isinstance(obj, dict):
+            return obj.get(key, default)
+        return getattr(obj, key, default)
+
+    def diagnostic_print(label, values):
+        print(f"\n--- {label} ---")
+
+        if not isinstance(values, (list, tuple)):
+            print(
+                f"非列表：{type(values).__name__} = {values!r}"
+            )
+            return
+
+        for item in values:
+            if not isinstance(item, dict):
+                print(f"非 dict 项：{item!r}")
+                continue
+
+            if item.get("status") == "UNKNOWN":
+                print(
+                    f"type={item.get('condition_type', item.get('type'))!r} | "
+                    f"id={item.get('condition_id')!r} | "
+                    f"condition={item.get('condition')!r}"
+                )
+
+    diagnostic_print(
+        'builder_result["condition_results"]',
+        builder_result.get("condition_results", []),
+    )
+
+    diagnostic_print(
+        'builder_result["exclusion_condition_results"]',
+        builder_result.get("exclusion_condition_results", []),
+    )
+
+    diagnostic_print(
+        'builder_result["exception_results"]',
+        builder_result.get("exception_results", []),
+    )
+
+    raw_decision = builder_result.get("raw_decision")
+
+    diagnostic_print(
+        'builder_result["raw_decision"].condition_results',
+        diagnostic_read(
+            raw_decision,
+            "condition_results",
+            [],
+        ),
+    )
+
+    print("\n" + "=" * 90)
+    print("UNKNOWN 条件文本边界诊断结束")
+    print("=" * 90)
+
     final_1 = final_validation(
         answer=malicious_satisfied,
         question=QUESTION,
         decision=builder_result,
     )
+
+    # ========================================================
+    # Fallback 实际答案与 UNKNOWN 条件位置诊断
+    # ========================================================
+
+    print("\n" + "=" * 90)
+    print("Fallback 实际答案与 UNKNOWN 条件位置诊断")
+    print("=" * 90)
+
+    fallback_text = str(final_1)
+
+    print("\n--- Fallback 最终答案 ---")
+    print(fallback_text)
+
+    print("\n--- UNKNOWN 条件定位 ---")
+
+    for item in builder_result.get("condition_results", []):
+
+        if not isinstance(item, dict):
+            continue
+
+        if item.get("status") != "UNKNOWN":
+            continue
+
+        condition = item.get("condition", "")
+        condition_type = item.get("condition_type", "")
+        condition_id = item.get("condition_id", "")
+
+        position = fallback_text.find(condition)
+
+        print(
+            f"\nID：{condition_id}"
+            f"\nTYPE：{condition_type}"
+            f"\nCONDITION：{condition!r}"
+            f"\nPOSITION：{position}"
+        )
+
+        if position >= 0:
+            print(
+                "ANSWER CONTEXT：",
+                repr(
+                    fallback_text[
+                        max(0, position - 40):
+                        position + len(condition) + 80
+                    ]
+                )
+            )
+
+    print("\n" + "=" * 90)
+    print("Fallback 实际答案诊断结束")
+    print("=" * 90)
+
 
     assert final_1, (
         "final_validation 没有返回最终答案"

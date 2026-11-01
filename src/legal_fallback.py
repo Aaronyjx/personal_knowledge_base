@@ -215,10 +215,10 @@ def build_fallback_answer(
         EXCLUSION：
 
             SATISFIED
-                → 排除情形不存在 / 未触发
+                → 排除情形存在 / 已触发
 
             NOT_SATISFIED
-                → 排除情形存在 / 已触发
+                → 排除情形不存在 / 未触发
 
             UNKNOWN
                 → 尚未确认
@@ -226,10 +226,10 @@ def build_fallback_answer(
         EXCEPTION：
 
             SATISFIED
-                → 例外情形不存在 / 未触发
+                → 例外情形存在 / 已触发
 
             NOT_SATISFIED
-                → 例外情形存在 / 已触发
+                → 例外情形不存在 / 未触发
 
             UNKNOWN
                 → 尚未确认
@@ -1398,149 +1398,6 @@ def build_fallback_answer(
         or "无。"
     )
 
-    # ========================================================
-    # 分类结果自然语言转换
-    # ========================================================
-
-    def format_category_results(
-        items,
-        category,
-        empty="- 无。",
-    ):
-        """
-        将内部 ConditionResult 状态转换为最终回答中的自然语言语义。
-
-        注意：
-
-            REQUIRED：
-
-                SATISFIED
-                    → 已满足
-
-                NOT_SATISFIED
-                    → 未满足
-
-                UNKNOWN
-                    → 尚未确认
-
-            EXCLUSION：
-
-                SATISFIED
-                    → 未触发
-
-                NOT_SATISFIED
-                    → 已触发
-
-                UNKNOWN
-                    → 尚未确认
-
-            EXCEPTION：
-
-                SATISFIED
-                    → 未触发
-
-                NOT_SATISFIED
-                    → 已触发
-
-                UNKNOWN
-                    → 尚未确认
-
-        这是内部状态到自然语言语义的映射，
-        不属于重新法律推理。
-        """
-
-        lines = []
-
-        semantic_map = {
-
-            "REQUIRED": {
-                "SATISFIED": "已满足",
-                "NOT_SATISFIED": "未满足",
-                "UNKNOWN": "尚未确认",
-            },
-
-            "EXCLUSION": {
-                "SATISFIED": "已触发",
-                "NOT_SATISFIED": "未触发",
-                "UNKNOWN": "尚未确认",
-            },
-
-            "EXCEPTION": {
-                "SATISFIED": "已触发",
-                "NOT_SATISFIED": "未触发",
-                "UNKNOWN": "尚未确认",
-            },
-        }
-
-        category = normalize_text(
-            category
-        ).upper()
-
-        category_map = semantic_map.get(
-            category,
-            {},
-        )
-
-        for item in items:
-
-            if not isinstance(item, dict):
-                continue
-
-            condition = normalize_text(
-                item.get(
-                    "condition",
-                    "",
-                )
-            )
-
-            status = normalize_text(
-                item.get(
-                    "status",
-                    "",
-                )
-            ).upper()
-
-            reason = normalize_text(
-                item.get(
-                    "reason",
-                    "",
-                )
-            )
-
-            if not condition:
-                continue
-
-            semantic_status = category_map.get(
-                status,
-                "尚未确认",
-            )
-
-            line = (
-                f"- [{semantic_status}] "
-                f"{condition}"
-            )
-
-            if reason:
-
-                line += (
-                    f"：{reason}"
-                )
-
-            lines.append(
-                line
-            )
-
-        return lines or [empty]
-
-    exclusion_lines = format_category_results(
-        exclusion_results,
-        "EXCLUSION",
-    )
-
-    exception_lines = format_category_results(
-        exception_results,
-        "EXCEPTION",
-    )
 
     # ========================================================
     # 法律依据

@@ -232,29 +232,60 @@ def test_lookup_supports_runtime_registered_rule() -> None:
 
 def test_runtime_registered_rule_isolated() -> None:
     """
-    验证临时 Runtime Rule 的 Lookup 返回值仍然是独立副本。
+    验证临时 Runtime Rule 的 Lookup 返回值是独立副本。
+    本测试自行注册规则，不依赖其他测试的执行顺序。
     """
+    isolated_rule_id = "RULE-TEST-RUNTIME-LOOKUP-ISOLATION"
+
+    temporary_rule = {
+        "rule_id": isolated_rule_id,
+        "law_name": "Runtime Lookup 隔离专用测试法律",
+        "article_number": "隔离测试专用条文",
+        "rule_name": "Runtime Lookup 隔离测试规则",
+        "conditions": ["测试条件一"],
+        "exclusion_conditions": [],
+        "exceptions": [],
+        "condition_definitions": [
+            {
+                "condition_id": "TEST-REQUIRED-ISOLATION-001",
+                "condition": "测试条件一",
+                "condition_type": "REQUIRED",
+            },
+        ],
+        "legal_obligations": ["测试义务"],
+        "legal_consequences": ["测试法律后果"],
+        "references": [TEST_ARTICLE_99],
+    }
+
+    try:
+        get_rule(isolated_rule_id)
+    except KeyError:
+        pass
+    else:
+        raise AssertionError(
+            f"测试规则已存在，拒绝覆盖：{isolated_rule_id}"
+        )
+
+    register_rule(temporary_rule)
 
     rule = find_rule_by_article(
-        law_name=TEST_LAW_NAME,
-        article_number=TEST_ARTICLE_99,
+        law_name="Runtime Lookup 隔离专用测试法律",
+        article_number="隔离测试专用条文",
     )
 
     assert rule is not None
+    assert rule["rule_id"] == isolated_rule_id
 
-    rule["conditions"].append(
-        "TEST_RUNTIME_MUTATION"
-    )
+    rule["conditions"].append("TEST_RUNTIME_MUTATION")
 
     current = find_rule_by_article(
-        law_name=TEST_LAW_NAME,
-        article_number=TEST_ARTICLE_99,
+        law_name="Runtime Lookup 隔离专用测试法律",
+        article_number="隔离测试专用条文",
     )
 
     assert current is not None
-    assert current["conditions"] == [
-        "测试条件一",
-    ]
+    assert current["rule_id"] == isolated_rule_id
+    assert current["conditions"] == ["测试条件一"]
 
 
 def test_lookup_does_not_modify_registry() -> None:
