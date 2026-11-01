@@ -134,6 +134,19 @@ ARTICLE_PATTERN = re.compile(
 
 
 # ============================================================
+# 独立章节标题识别
+# ============================================================
+
+STRUCTURE_PATTERN = re.compile(
+    r"(?m)^[ \t]*"
+    r"第[零〇一二两三四五六七八九十百千万\d]+"
+    r"[章节]"
+    r"(?:[ \t]+[^\n]*)?"
+    r"[ \t]*$"
+)
+
+
+# ============================================================
 # 清理文本
 # ============================================================
 
@@ -331,6 +344,11 @@ def split_articles(
         ARTICLE_PATTERN.finditer(text)
     )
 
+    # 找出全文中所有独立章标题和节标题
+    structure_matches = list(
+        STRUCTURE_PATTERN.finditer(text)
+    )
+
     if not matches:
 
         return []
@@ -347,15 +365,36 @@ def split_articles(
 
         start = match.start()
 
+        # ----------------------------------------------------
+        # 同时检查下一条法条和下一条独立章节标题
+        # ----------------------------------------------------
+
+        boundary_candidates = []
+
+        # 下一条法条的位置
         if index + 1 < len(matches):
+            boundary_candidates.append(
+                matches[index + 1].start()
+            )
 
-            end = matches[
-                index + 1
-            ].start()
+        # 当前法条之后第一个章标题或节标题的位置
+        next_structure = next(
+            (
+                structure_match.start()
+                for structure_match in structure_matches
+                if structure_match.start() > start
+            ),
+            None,
+        )
 
-        else:
+        if next_structure is not None:
+            boundary_candidates.append(next_structure)
 
-            end = len(text)
+        # 选择最早出现的有效边界
+        end = min(
+            boundary_candidates,
+            default=len(text),
+        )
 
         article_text = text[
             start:end

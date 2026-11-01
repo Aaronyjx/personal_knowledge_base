@@ -7,7 +7,7 @@ PDF Loader
 from pathlib import Path
 from typing import List, Dict
 
-import fitz
+import pymupdf
 
 
 def load_pdf(
@@ -16,31 +16,27 @@ def load_pdf(
 
     path = Path(file_path)
 
-    document = fitz.open(
-        path
-    )
-
     pages = []
 
-    for page_number, page in enumerate(
-        document,
-        start=1,
-    ):
+    with pymupdf.open(path) as document:
 
-        text = page.get_text(
-            "text"
-        ).strip()
+        for page_number, page in enumerate(
+            document,
+            start=1,
+        ):
 
-        if not text:
-            continue
+            text = page.get_text(
+                "text"
+            ).strip()
 
-        pages.append(
-            {
-                "page": page_number,
-                "text": text,
-            }
-        )
+            if not text:
+                continue
 
-    document.close()
+            pages.append(
+                {
+                    "page": page_number,
+                    "text": text,
+                }
+            )
 
     return pages
