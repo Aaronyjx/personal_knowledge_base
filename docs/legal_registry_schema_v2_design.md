@@ -7,6 +7,77 @@
 
 本设计不迁移旧 Qdrant Points，不依赖旧 Qdrant 正文。
 
+### 1.1 文档定位
+
+本文档定义 Legal Registry V2（Canonical Registry V2）的正式数据结构、
+实体关系、身份生成协议、法律版本管理、来源追溯及持久化事务保护规则。
+
+Canonical Registry V2 是本项目法律数据的规范化权威数据层，
+也是后续向量数据库构建和检索的数据来源。
+
+本文档完成的是 Canonical Registry 层的设计定稿，
+不代表整个法律 RAG 数据存储与检索架构已经全部设计完成。
+
+### 1.2 整体数据架构
+
+本项目采用分层数据架构：
+
+1. 权威法律来源层：保存官方原始法律文件及其来源信息。
+2. Canonical Registry 层：统一管理法律身份、版本、法条正文、
+   来源记录及其关联关系。
+3. 向量检索层：基于 Canonical Registry 构建 Qdrant Collection，
+   保存向量及可追溯的 Payload。
+4. 检索与决策层：利用向量检索结果获取法律依据，
+   并交由现有法律规则与决策系统处理。
+
+各层职责必须明确：
+
+- 权威法律文件是原始法律内容的来源。
+- Canonical Registry 是法律结构化数据及其身份关系的权威来源。
+- Qdrant 是由 Canonical Registry 派生构建的向量检索存储层。
+- Qdrant 不得反向决定法律身份、法律版本或权威正文。
+
+### 1.3 本文档的设计范围
+
+本文档负责定稿：
+
+- Law、LawVersion、Source、Article 等实体结构；
+- 法律、版本、来源及法条关联关系；
+- UUID5 身份协议；
+- 法律版本和适用日期管理；
+- 权威来源及正文 Hash 追溯；
+- Registry 数据完整性及事务保护要求。
+
+本文档不负责定稿 Qdrant Collection 的完整技术结构，
+也不负责定稿 Registry 到 Qdrant 的实际构建、写入和验收实现。
+
+### 1.4 后续配套设计
+
+后续必须形成两份独立的配套设计：
+
+1. Qdrant Collection V2 设计规范：
+   定义 Collection、Vector、Point ID、Payload、索引、
+   向量配置及检索过滤规则。
+2. Registry → Qdrant 构建与验收规范：
+   定义 Registry 数据读取、Embedding 生成、批量写入、
+   失败处理、数据一致性验证、检索验收及 Collection 切换流程。
+
+两份配套设计必须遵守本文档已经定稿的身份协议、
+正文来源规则和数据追溯要求。
+
+如后续发现 Canonical Registry 结构需要调整，
+应先修改并确认本文档，再实施相关代码变更。
+
+### 1.5 设计状态
+
+本文档代表 Canonical Registry V2 的正式设计基线。
+
+后续 Builder、Registry 验证器及 Qdrant 构建程序
+均应以本文档为依据实现。
+
+Qdrant Collection V2 和 Registry → Qdrant 构建与验收规范
+属于后续独立设计阶段，完成评审和确认后方可进入相应实施阶段。
+
 ## 2. Registry 顶层结构
 
 保持现有顶层数组结构：
@@ -240,23 +311,34 @@ SourceLocation：
 7. Registry JSON 文件事务保护必须保留：
    文件锁、原子写入、fsync 和提交前文件备份。
 
-## 12. 后续实施顺序
+## 12. 后续实施路线与阶段交付物
 
-阶段一：数据结构设计与定稿。
+本项目按照以下阶段推进：
 
-阶段二：重构 Canonical Registry Builder。
+| 阶段 | 工作内容 | 主要交付物 |
+|---|---|---|
+| 第一阶段 | Canonical Registry V2 数据结构与身份协议设计 | 本文档 |
+| 第二阶段 | Canonical Registry Builder 重构 | Builder 实现及测试 |
+| 第三阶段 | 正式 Registry 构建与完整性验收 | Canonical Registry V2 数据文件及验收报告 |
+| 第四阶段 | Qdrant Collection V2 技术设计 | 独立 Qdrant 设计规范 |
+| 第五阶段 | Registry → Qdrant 构建与验收流程设计 | 独立构建与验收规范 |
+| 第六阶段 | Qdrant Collection V2 实现及数据入库 | 新 Collection 及入库报告 |
+| 第七阶段 | 新 Collection 完整性和检索效果验收 | 验收报告及回归测试结果 |
+| 第八阶段 | 新旧 Collection 切换与旧数据清理 | 切换记录及清理审计 |
+| 第九阶段 | 完整回归、版本审计及 GitHub 提交 | 正式发布版本 |
 
-阶段三：构建并验证正式 Registry。
+阶段之间必须遵循依赖关系。
 
-阶段四：设计新 Qdrant Payload 和 Collection。
+在 Canonical Registry V2 正式构建并通过完整性验收前，
+不得开始正式 Qdrant 数据入库。
 
-阶段五：从新 Registry 重新生成 Embedding 并入库。
+在新 Collection 完整验收前，不得删除旧 Collection。
 
-阶段六：完整验收新 Collection。
+删除旧 Collection 前，必须重新核对目标 Collection 名称，
+并取得用户明确确认。
 
-阶段七：经用户确认后清理旧 Collection 和退出代码。
-
-阶段八：完整回归、版本审计及 GitHub 提交。
+每个阶段均应完成独立验证、工程目录整理、
+Git 差异审计及 GitHub 提交。
 
 
 ## 13. 身份协议与事务保护补充定稿
@@ -490,3 +572,93 @@ jurisdiction 参与 law_id 身份生成，不得在不执行身份迁移设计�
 
 本章节只定义后续 Payload 的身份和追溯要求。
 本阶段不创建 Collection、不生成 Embedding、不写入 Qdrant。
+
+## 14. 后续 Qdrant 与构建验收设计边界
+
+本章节明确后续配套设计的范围和必须遵守的架构约束。
+本章节不提前定稿尚未完成评审的 Qdrant 技术参数。
+
+### 14.1 Qdrant Collection V2 设计范围
+
+后续 Qdrant Collection V2 设计必须明确：
+
+1. Collection 的命名和生命周期。
+2. Vector 的名称、维度、距离度量及模型版本管理。
+3. Point ID 的生成规则和稳定性。
+4. Payload 的完整字段结构及字段类型。
+5. Payload 索引及法律版本过滤策略。
+6. 法律、版本、法条和来源的关联追溯。
+7. 检索时的法律版本和适用日期约束。
+8. 多向量、Chunk 和不同检索表示的扩展边界。
+
+上述具体技术参数均属于后续独立设计内容，
+不得将尚未验证的选择视为本文档已经定稿的规范。
+
+### 14.2 LegalArticle 与 Qdrant Point 的关系
+
+Canonical Registry 中的 LegalArticle 是规范化的法条数据实体。
+
+Qdrant Point 是向量检索层中的存储实体。
+二者不应被预先限定为必然一对一关系。
+
+后续应评估：
+
+- 一条 LegalArticle 生成一个 Point；
+- 一条较长 LegalArticle 拆分为多个 Chunk 并生成多个 Point；
+- 同一 LegalArticle 生成不同检索表示；
+- 不同向量模型或检索策略对应的 Point 组织方式。
+
+如果一条 LegalArticle 对应多个 Point，
+每个 Point 都必须能够追溯到对应的 article_id、
+version_id 和 law_id，并保留必要的正文及来源追溯信息。
+
+Point 的稳定身份规则应在 Qdrant 设计阶段单独确定，
+不得直接假定 article_id 可以充当所有 Point 的唯一 ID。
+
+是否采用 Chunk、如何划分 Chunk，
+以及是否使用多向量，均须经过独立设计和验证。
+
+### 14.3 Registry → Qdrant 构建流程设计范围
+
+后续构建与验收规范至少应覆盖：
+
+1. 从正式 Canonical Registry 读取数据。
+2. Registry Schema 和身份关系验证。
+3. Article 正文及 Hash 一致性验证。
+4. Embedding 模型、版本和配置管理。
+5. Embedding 批处理与失败处理。
+6. Qdrant Point 和 Payload 构建。
+7. 批量 Upsert、重试和写入结果核验。
+8. Registry 与 Qdrant 数据数量及身份关系核验。
+9. Point 重复、遗漏和孤立关联检测。
+10. 检索过滤和法律版本约束测试。
+11. 新 Collection 完整性验收。
+12. 新旧 Collection 切换和旧 Collection 清理条件。
+
+### 14.4 数据权威性与重建约束
+
+后续 Qdrant 构建必须遵守：
+
+- Canonical Registry 是结构化法律数据的权威来源。
+- 向量正文必须来自 Registry 的 article_text 或其明确派生的 Chunk。
+- 每个向量结果必须保留可追溯的法律身份和来源身份。
+- 不得使用旧 Qdrant Points 作为新 Collection 的迁移数据来源。
+- 新 Collection 应由正式 Registry 和明确版本的 Embedding 配置重新构建。
+- 新 Collection 完整验收前，不得删除旧 Collection。
+- 删除旧 Collection 前，必须重新核对目标并取得用户明确确认。
+
+### 14.5 配套设计的独立定稿要求
+
+Qdrant Collection V2 设计和 Registry → Qdrant 构建与验收设计
+必须分别形成独立设计文档。
+
+每份文档均应明确：
+
+- 设计目标和适用范围；
+- 数据结构及字段定义；
+- 身份与关联规则；
+- 失败处理和一致性约束；
+- 验收标准；
+- 实施顺序和安全边界。
+
+配套设计经审查和确认后，方可进入对应实现阶段。
