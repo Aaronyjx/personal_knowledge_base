@@ -413,3 +413,506 @@ Store、初始化入口和 UUID Namespace 使用情况。
 
 本文件只用于跟踪项目计划、阶段状态和交付记录。
 具体技术规范以对应的正式设计文档为准。
+
+
+---
+
+## Canonical Registry V2 实施计划
+
+### 一、实施原则
+
+本阶段在已经定稿的：
+
+- `docs/legal_registry_schema_v2_design.md`
+- `docs/legal_registry_v2_roadmap.md`
+
+基础上推进。
+
+遵循以下原则：
+
+1. 按阶段实施，不跨阶段修改。
+2. 每个阶段先确定文件修改范围、接口和验收标准。
+3. 所有测试统一使用 pytest。
+4. 不修改与当前阶段无关的模块。
+5. 不修改旧 Qdrant Collection，不执行旧 Point 迁移、备份或恢复。
+6. 不未经确认删除、覆盖或破坏现有数据。
+7. 保留现有 Article ID 身份协议。
+8. Builder 只从权威法律文件和生产 Parser 获取法律正文，不依赖旧 Qdrant。
+9. 每个阶段完成后先验证，再审查下一阶段。
+10. 最终执行完整 pytest、精确版本审计及 GitHub commit/push。
+
+### 二、阶段 A：Identity 身份层
+
+### 目标
+
+建立 Canonical Registry V2 的确定性身份生成协议，为 Law、LawVersion、Source 和 ArticleSource 提供稳定身份。
+
+### 修改范围
+
+| 文件 | 操作 |
+|---|---|
+| `src/legal_identity.py` | 扩展确定性身份生成函数 |
+| `tests/test_legal_identity.py` | 扩展 pytest 测试 |
+
+本阶段不修改 Models、Store、Builder、Qdrant 和正式 Registry JSON。
+
+### Namespace
+
+使用已经定稿的四个 Namespace：
+
+- LAW_NAMESPACE：`0e6d1b4a-72c8-5f31-9a40-2b7e6d8c1f53`
+- VERSION_NAMESPACE：`1f7c2a90-8b43-5d61-ae20-3c9f7b5d1a64`
+- SOURCE_NAMESPACE：`2a8e3c51-9d74-5f20-b136-4e0a8c6d2f75`
+- ARTICLE_SOURCE_NAMESPACE：`3b9f4d62-ae85-5c31-c247-5f1b9d7e3a86`
+
+现有 ARTICLE_NAMESPACE 必须原样保留。
+
+### 身份生成函数
+
+统一提供：
+
+- `build_law_id(jurisdiction, canonical_law_name)`
+- `build_version_id(law_id, version_key)`
+- `build_source_id(official_source_url, source_hash)`
+- `build_article_id(version_id, article_number)`
+- `build_article_source_id(article_id, source_id)`
+
+### 规范化和序列化
+
+新身份使用规范 JSON：
+
+- `ensure_ascii=False`
+- `sort_keys=True`
+- `separators=(",", ":")`
+- UTF-8 编码
+- UUID5 生成身份
+
+Law 名称使用 NFKC、去除首尾空白、合并连续空白。
+
+Source URL 规范化遵循已定稿规则：
+
+- 仅允许 HTTP/HTTPS。
+- Scheme 和 hostname 转为小写。
+- 移除默认端口。
+- 移除 Fragment。
+- 保留实际路径。
+- 保留查询参数及其顺序。
+- 拒绝 URL 用户名和密码。
+- 不使用文件名或本地路径代替官方 URL。
+
+Source Hash 使用原始文件 SHA256。
+
+### Article ID 兼容要求
+
+现有 `build_article_id()` 的：
+
+- Namespace；
+- 身份输入；
+- 条号规范化；
+- UUID5 生成方式；
+
+全部保持不变。
+
+不得为了统一接口而改变现有 Article ID。
+
+### pytest 验收范围
+
+1. Law 身份稳定性和不同 jurisdiction 的区分。
+2. Version 身份稳定性和跨 Law 隔离。
+3. Source URL 规范化。
+4. Source URL 和 SHA256 的身份组合。
+5. 非法 URL 和非法 SHA256 拒绝。
+6. Article ID 旧协议兼容。
+7. ArticleSource 身份稳定性。
+8. 字典键顺序变化不影响身份。
+9. 固定输入的身份回归测试。
+
+### 阶段完成条件
+
+- 所有身份测试通过。
+- 现有 Article ID 回归测试通过。
+- Namespace 和身份协议与设计文档一致。
+- 不修改其他阶段文件。
+
+### 三、阶段 B：Models 与 Store
+
+### 目标
+
+将 Registry 数据模型和持久化校验升级到 Schema 2.0。
+
+### 主要修改
+
+**Law**
+
+新增：
+
+- `jurisdiction`
+
+**LawVersionSource**
+
+新增：
+
+- `source_file_path`
+- `normalization_profile`
+- `normalized_document_sha256`
+
+明确区分：
+
+- `source_hash`：原始文件 SHA256。
+- `normalized_document_sha256`：Parser 规范化完整文档 SHA256。
+
+**LegalArticle**
+
+新增：
+
+- `article_text`
+
+正文和 Hash 必须来自生产 Parser 的 ParsedArticle，不允许 Builder 或 Model 再次清洗正文。
+
+**Store**
+
+- Schema 升级到 2.0。
+- 验证四类新身份与其输入字段的一致性。
+- 保留 Article ID 原有验证。
+- 保留版本、法条、来源关联完整性验证。
+- 保留文件锁、事务、备份、原子写入和 fsync。
+- 防止非法或不完整 Registry 写入。
+
+### pytest 验收范围
+
+- Schema 2.0 序列化与反序列化。
+- 必需字段和非法字段。
+- 四类确定性身份验证。
+- Law、Version、Source、Article、ArticleSource 关联。
+- Article 正文和 Hash 一致性。
+- 事务失败不提交。
+- 并发事务安全。
+- 原子写入及现有 Store 回归测试。
+
+### 四、阶段 C：Registry Builder 与初始化流程
+
+### 目标
+
+建立统一的 Registry 构建入口，消除旧 Preview 脚本中的重复解析和 Qdrant 正文依赖。
+
+### 新增模块
+
+`src/legal_registry_builder.py`
+
+### Builder 职责
+
+1. 读取法律来源配置。
+2. 定位权威原始 DOCX。
+3. 校验原始文件 SHA256。
+4. 调用 `legal_document_parser.py`。
+5. 获取 Parser 返回的 ParsedDocument 和 ParsedArticle。
+6. 调用 Identity 生成确定性身份。
+7. 构造 Law、LawVersion、Source。
+8. 从 ParsedArticle 构造 LegalArticle。
+9. 从 Parser 的 SourceLocation 构造 ArticleSource 关联。
+10. 生成完整 Schema 2.0 Registry。
+11. 调用 Store 验证接口进行结构校验。
+
+### 明确禁止
+
+- 从旧 Qdrant 获取法条正文。
+- 在 Builder 中重复实现 DOCX 法条解析。
+- 自行重新清洗 Parser 已规范化的正文。
+- 使用 uuid4 生成 Registry 身份。
+- 使用本地绝对路径生成身份。
+- 将 Qdrant 作为法律身份或正文的权威来源。
+
+### 初始化流程
+
+重构：
+
+- `scripts/preview_legal_registry.py`
+- `scripts/initialize_legal_registry.py`
+
+Preview 负责预览 Builder 结果。
+
+Initialize 负责安全持久化，保留空 Registry 检查、事务锁、写入后重新加载及完整核对。
+
+### 五、阶段 D：Registry 完整构建与验收
+
+### 首批构建范围
+
+| 法律 | 法条数量 |
+|---|---:|
+| 劳动争议调解仲裁法 | 54 |
+| 劳动合同法 | 98 |
+| 劳动合同法实施条例 | 38 |
+| 劳动法 | 107 |
+| 合计 | 297 |
+
+预期数据：
+
+- 4 Laws
+- 4 LawVersions
+- 4 Sources
+- 297 Articles
+- 297 ArticleSources
+- 297 SourceLocations
+
+### 验收要求
+
+1. 所有原始法律文件 Hash 正确。
+2. Parser 解析数量正确。
+3. Article 正文与 Parser 输出完全一致。
+4. Article Hash 与 Parser 输出完全一致。
+5. SourceLocation 与 Parser 输出一致。
+6. 所有确定性身份可重复构建。
+7. 相同输入重复构建不会改变身份。
+8. Store 完整验证通过。
+9. Schema 版本为 2.0。
+10. 不依赖旧 Qdrant 数据。
+
+### 六、阶段 E：项目级验证与 GitHub 交付
+
+遵循固定交付流程：
+
+**修改 → pytest 验证 → 精确版本审计 → GitHub commit/push**
+
+交付前检查：
+
+- 全量 pytest。
+- 测试数量及结果。
+- Registry JSON 结构。
+- 身份关联一致性。
+- 原始文件及规范化文档 Hash。
+- Git diff。
+- Git status。
+- 当前分支和 HEAD。
+- 不相关未跟踪文件是否保持原状。
+
+只有完成审计并确认交付范围后，才提交 GitHub。
+
+### 七、后续独立阶段：Qdrant 重建
+
+Registry V2 完成并验收后，再进入 Qdrant 重建阶段。
+
+Qdrant 是 Canonical Registry 的派生检索层，不负责法律身份、版本或权威正文。
+
+旧 Collection 的删除、新 Collection 的结构及数据写入，应作为单独阶段制定和确认，不在 Identity、Models、Store 或 Builder 阶段执行。
+
+### 八、当前实施状态
+
+| 阶段 | 状态 |
+|---|---|
+| V2 Schema 与身份协议设计 | 已完成 |
+| 只读架构及 Builder 审计 | 已完成 |
+| 阶段 A 实施方案 | 已审查，已确定 |
+| 阶段 A 代码实施 | 进行中（Identity 实现及对应 pytest 初步验证已完成） |
+| 阶段 B | 尚未开始 |
+| 阶段 C | 尚未开始 |
+| 阶段 D | 尚未开始 |
+| 阶段 E | 尚未开始 |
+| Qdrant 重建 | 后续独立阶段 |
+
+当前不得将“实施方案已确定”误认为“代码已经实施”。
+
+
+## Identity 阶段修复记录
+
+记录日期：2026-11-07
+
+### 已完成的只读审计
+
+- Identity 专项 pytest：136 passed。
+- 全项目 pytest：647 passed。
+- `git diff --check`：通过。
+- 确认 Source ID 身份 JSON 字段名与正式设计第 13.5 节不一致。
+- 确认 URL 首尾空白处理需要按照正式规范执行 strip。
+- 确认 Article ID 原 Namespace 和固定身份值未被修改。
+
+### 本次修复内容
+
+- Source ID 身份字段改为 `canonical_official_source_url`。
+- 官方来源 URL 先执行首尾空白去除，再进行 URL 校验。
+- 增加 URL 首尾空白规范化测试。
+- 更新 Source ID 固定回归值：
+  `3620eb58-efe5-5bb9-838c-2c0ad3140d38`。
+- 更新 ArticleSource ID 固定回归值：
+  `cc411d7b-eb48-5015-84fa-e16849124191`。
+- Article ID 原固定回归值保持不变：
+  `44a70e2f-489b-5128-bdf4-2904b0d2f75a`。
+
+### 当前状态
+
+- Identity 修复代码：本次脚本执行后待验证。
+- Identity 专项 pytest：待重新运行。
+- 全项目 pytest：待重新运行。
+- 精确版本审计：待重新执行。
+- GitHub commit/push：尚未执行。
+- Models、Store、Builder：尚未启动。
+
+### 本次修改边界
+
+未修改 Registry 数据、Qdrant 数据、Models、Store、Builder。
+未删除或覆盖 reports 目录中的现有文件。
+
+
+## Identity URL 控制字符边界修复记录
+
+记录日期：2026-11-07
+
+### 上一步验证结果
+
+- Python 语法检查：通过。
+- Identity 专项 pytest：136 passed，1 failed。
+- 全项目 pytest：647 passed，1 failed。
+- 两次测试均指向同一个用例：
+  `test_source_url_rejects_invalid_urls[https://example.com/law\\n]`。
+- Git diff --check：通过。
+
+### 问题原因
+
+URL 规范化先执行 strip，导致末尾换行符被删除，
+后续控制字符校验无法发现原始输入中的换行符。
+
+### 本次修复
+
+- 将 ASCII 控制字符检查移动到 strip 之前。
+- 普通首尾空白仍允许去除。
+- URL 内部空白仍然拒绝。
+- 不改变 Source ID、ArticleSource ID 或 Article ID 身份协议。
+
+### 当前状态
+
+- 控制字符边界修复：已写入，待 pytest 验证。
+- Identity 专项 pytest：待运行。
+- 全项目 pytest：待运行。
+- 精确版本审计：待完成。
+- GitHub commit/push：尚未执行。
+
+
+## Identity 修复后 pytest 验证记录（2026-11-07）
+
+### 实际验证结果
+
+| 检查项目 | 结果 |
+|---|---|
+| Python 语法检查 | 通过，退出码 0 |
+| Identity 专项 pytest | 137 passed，退出码 0 |
+| 全项目 pytest | 648 passed，退出码 0 |
+| git diff --check | 通过，退出码 0 |
+
+### Warning
+
+全项目测试出现 5 条 SWIG DeprecationWarning：
+- SwigPyPacked
+- SwigPyObject
+- swigvarlink
+
+这些 Warning 未导致测试失败。
+
+### 本次验证结论
+
+- URL 首尾普通空白规范化测试通过。
+- URL 首尾控制字符拒绝测试通过。
+- Source ID 固定回归值保持为：
+  `3620eb58-efe5-5bb9-838c-2c0ad3140d38`
+- ArticleSource ID 固定回归值保持为：
+  `cc411d7b-eb48-5015-84fa-e16849124191`
+- Article ID 固定回归值保持为：
+  `44a70e2f-489b-5128-bdf4-2904b0d2f75a`
+
+### 后续状态
+
+- Identity 修复及 pytest 验证：通过。
+- 精确版本审计：待完成。
+- GitHub commit/push：尚未执行。
+- Models、Store、Builder：尚未启动。
+
+<!-- IDENTITY_CURRENT_STATUS_START -->
+
+## Identity 阶段当前状态（截至 2026-11-07）
+
+本节是 Identity 阶段最新状态的权威进度摘要。
+此前历史记录中的待验证状态属于当时记录，以本节为准。
+
+### 已完成
+
+- Identity 身份实现及修复。
+- Source 身份 JSON 使用 `canonical_official_source_url`。
+- URL 控制字符检查先于首尾空白清理。
+- Article ID 原有身份协议保持不变。
+- Identity 专项 pytest：137 passed，退出码 0。
+- 全项目 pytest：648 passed，退出码 0。
+- Python 语法检查通过。
+- `git diff --check` 通过。
+- 精确版本审计：通过。
+- Law、Version、Source、ArticleSource 四类固定 UUID 独立复算一致。
+
+### 当前尚未完成
+
+- Identity 阶段 GitHub commit/push：尚未执行。
+- 正式阶段 2 的 Models、Store、Builder 工作：尚未开始。
+
+### 当前 Git 交付状态
+
+- 审计基准 HEAD：`f709dc7ef79f18c59ab98ee54a0fda41bb83b5ec`
+- 当前分支：`main`
+- `HEAD` 与 `origin/main`：完全同步，差异为 `0 0`。
+- Identity 待交付文件：
+  - `src/legal_identity.py`
+  - `tests/test_legal_identity.py`
+  - `docs/legal_registry_v2_roadmap.md`
+- `reports/` 下的未跟踪备份文件必须保留，不纳入提交。
+
+### 后续执行顺序
+
+1. 核对暂存文件清单。
+2. 检查完整 staged diff。
+3. 确认 reports 备份没有进入暂存区。
+4. GitHub commit/push。
+5. 更新 Roadmap，之后再进入下一实施工作块。
+
+**正式九阶段路线中的第 2 阶段是 Canonical Registry Builder 重构。
+Identity 是其前置身份工作块，不代表正式阶段 2 已完成。**
+
+<!-- IDENTITY_CURRENT_STATUS_END -->
+
+
+---
+
+## Identity 精确版本审计记录（2026-11-07）
+
+### Git 版本身份
+
+- HEAD：`f709dc7ef79f18c59ab98ee54a0fda41bb83b5ec`
+- 分支：`main`
+- HEAD 与 origin/main：完全同步，差异 `0 0`。
+
+### 代码审计
+
+- 四类 V2 Namespace 与正式设计一致。
+- 规范 JSON 使用 UTF-8、`ensure_ascii=False`、`sort_keys=True` 和紧凑分隔符。
+- Source 身份字段为 `canonical_official_source_url`。
+- URL 控制字符在 strip 之前检查。
+- Article ID 与 HEAD 中的实现 AST 比较一致。
+- Models、Store、Builder、Qdrant 未纳入本次代码修改。
+
+### 固定身份独立复算
+
+| 身份 | 复算结果 |
+|---|---|
+| Law ID | `6669a5a0-a176-554d-bf34-3eda799c6309` |
+| Version ID | `0c8c8ef2-697b-5b62-81c2-be18d3a59d3b` |
+| Source ID | `3620eb58-efe5-5bb9-838c-2c0ad3140d38` |
+| ArticleSource ID | `cc411d7b-eb48-5015-84fa-e16849124191` |
+
+四项结果均与测试中的固定回归值一致。
+
+### 验证结果
+
+- Identity 专项 pytest：137 passed。
+- 全项目 pytest：648 passed。
+- Python 语法检查：通过。
+- `git diff --check`：通过。
+
+### 审计结论
+
+Identity 代码差异、测试差异、身份协议、固定 UUID 和 Git 版本身份均已审查通过。
+
+本次审计不代表 GitHub 提交已经完成。提交前仍须核对 staged diff，并排除 `reports/` 未跟踪备份目录。

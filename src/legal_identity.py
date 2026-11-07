@@ -13,9 +13,11 @@
 - 款、项、目引用解析
 """
 
+import json
 import re
 import unicodedata
 import uuid
+from urllib.parse import urlsplit, urlunsplit
 
 
 class InvalidArticleNumberError(ValueError):
@@ -33,6 +35,27 @@ class InvalidArticleNumberError(ValueError):
 #
 ARTICLE_NAMESPACE = uuid.UUID(
     "b6d7e8f1-2a3c-4d5e-8f90-1a2b3c4d5e6f"
+)
+
+
+# ============================================================
+# Canonical Registry V2 固定命名空间
+# ============================================================
+
+LAW_NAMESPACE = uuid.UUID(
+    "0e6d1b4a-72c8-5f31-9a40-2b7e6d8c1f53"
+)
+
+VERSION_NAMESPACE = uuid.UUID(
+    "1f7c2a90-8b43-5d61-ae20-3c9f7b5d1a64"
+)
+
+SOURCE_NAMESPACE = uuid.UUID(
+    "2a8e3c51-9d74-5f20-b136-4e0a8c6d2f75"
+)
+
+ARTICLE_SOURCE_NAMESPACE = uuid.UUID(
+    "3b9f4d62-ae85-5c31-c247-5f1b9d7e3a86"
 )
 
 
@@ -452,4 +475,261 @@ def build_article_id(
             ARTICLE_NAMESPACE,
             identity_name,
         )
+    )
+
+
+# ============================================================
+# Canonical Registry V2：通用身份辅助函数
+# ============================================================
+
+def _normalize_identity_text(value: str, field_name: str) -> str:
+    """执行 NFKC、去除首尾空白并合并连续空白。"""
+
+    if not isinstance(value, str):
+        raise ValueError(f"{field_name} 必须是字符串")
+
+    normalized = unicodedata.normalize("NFKC", value)
+    normalized = " ".join(normalized.split())
+
+    if not normalized:
+        raise ValueError(f"{field_name} 不能为空")
+
+    return normalized
+
+
+def _validate_identity_uuid(value: str, field_name: str) -> str:
+    """校验 UUID，并返回标准 UUID 字符串。"""
+
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} 必须是非空 UUID 字符串")
+
+    try:
+        parsed = uuid.UUID(value)
+    except (ValueError, AttributeError, TypeError) as exc:
+        raise ValueError(
+            f"{field_name} 不是有效 UUID：{value!r}"
+        ) from exc
+
+    return str(parsed)
+
+
+def _build_identity_uuid(namespace: uuid.UUID, identity: dict) -> str:
+    """使用规范 JSON 和 UUID5 生成稳定身份。"""
+
+    identity_json = json.dumps(
+        identity,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+    return str(uuid.uuid5(namespace, identity_json))
+
+
+# ============================================================
+# Canonical Registry V2：Law 身份
+# ============================================================
+
+def build_law_id(
+    jurisdiction: str,
+    canonical_law_name: str,
+) -> str:
+    """根据法域和规范法律名称生成稳定 Law ID。"""
+
+    normalized_jurisdiction = _normalize_identity_text(
+        jurisdiction,
+        "jurisdiction",
+    )
+
+    normalized_law_name = _normalize_identity_text(
+        canonical_law_name,
+        "canonical_law_name",
+    )
+
+    identity = {
+        "jurisdiction": normalized_jurisdiction,
+        "canonical_law_name": normalized_law_name,
+    }
+
+    return _build_identity_uuid(LAW_NAMESPACE, identity)
+
+
+# ============================================================
+# Canonical Registry V2：Version 身份
+# ============================================================
+
+def build_version_id(
+    law_id: str,
+    version_key: str,
+) -> str:
+    """根据 Law ID 和版本键生成稳定 Version ID。"""
+
+    normalized_law_id = _validate_identity_uuid(
+        law_id,
+        "law_id",
+    )
+
+    normalized_version_key = _normalize_identity_text(
+        version_key,
+        "version_key",
+    )
+
+    identity = {
+        "law_id": normalized_law_id,
+        "version_key": normalized_version_key,
+    }
+
+    return _build_identity_uuid(VERSION_NAMESPACE, identity)
+
+
+# ============================================================
+# Canonical Registry V2：官方来源 URL 规范化
+# ============================================================
+
+def normalize_official_source_url(official_source_url: str) -> str:
+    """
+    规范化官方来源 URL。
+
+    - 仅允许 HTTP / HTTPS；
+    - scheme 和 hostname 转小写；
+    - 移除对应协议的默认端口；
+    - 移除 fragment；
+    - 保留 path 原样；
+    - 保留 query 参数及其顺序；
+    - 拒绝用户名、密码和非法端口。
+    """
+
+    if not isinstance(official_source_url, str):
+        raise ValueError("official_source_url 必须是字符串")
+
+    # 控制字符必须在 strip 之前检查，避免换行符等被提前删除。
+    if any(ord(char) < 32 for char in official_source_url):
+        raise ValueError("official_source_url 不允许包含控制字符")
+
+    # 按正式身份协议去除普通首尾空白。
+    normalized_input_url = official_source_url.strip()
+
+    if not normalized_input_url:
+        raise ValueError("official_source_url 不能为空")
+
+    # URL 内部仍不允许出现空白。
+    if any(char.isspace() for char in normalized_input_url):
+        raise ValueError("official_source_url 不允许包含内部空白")
+
+    try:
+        parsed = urlsplit(normalized_input_url)
+
+        scheme = parsed.scheme.lower()
+
+        if scheme not in {"http", "https"}:
+            raise ValueError("只允许 HTTP 或 HTTPS URL")
+
+        if not parsed.netloc or not parsed.hostname:
+            raise ValueError("URL 缺少有效 hostname")
+
+        if parsed.username is not None or parsed.password is not None:
+            raise ValueError("URL 不允许包含用户名或密码")
+
+        hostname = parsed.hostname.lower()
+        port = parsed.port
+
+        # 拒绝显式但为空的端口，例如 https://example.com:
+        if parsed.netloc.endswith(":"):
+            raise ValueError("URL 端口不能为空")
+
+    except ValueError as exc:
+        raise ValueError(
+            f"非法官方来源 URL：{official_source_url!r}；{exc}"
+        ) from exc
+
+    # IPv6 hostname 需要保留方括号。
+    if ":" in hostname and not hostname.startswith("["):
+        normalized_host = f"[{hostname}]"
+    else:
+        normalized_host = hostname
+
+    if port is not None:
+        is_default_port = (
+            (scheme == "http" and port == 80)
+            or (scheme == "https" and port == 443)
+        )
+
+        if is_default_port:
+            normalized_netloc = normalized_host
+        else:
+            normalized_netloc = f"{normalized_host}:{port}"
+    else:
+        normalized_netloc = normalized_host
+
+    return urlunsplit(
+        (
+            scheme,
+            normalized_netloc,
+            parsed.path,
+            parsed.query,
+            "",
+        )
+    )
+
+
+# ============================================================
+# Canonical Registry V2：Source 身份
+# ============================================================
+
+def build_source_id(
+    official_source_url: str,
+    source_hash: str,
+) -> str:
+    """根据官方来源 URL 和原始文件 SHA256 生成 Source ID。"""
+
+    normalized_url = normalize_official_source_url(
+        official_source_url
+    )
+
+    if not isinstance(source_hash, str):
+        raise ValueError("source_hash 必须是字符串")
+
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", source_hash):
+        raise ValueError(
+            "source_hash 必须是 64 位十六进制 SHA256"
+        )
+
+    normalized_hash = source_hash.lower()
+
+    identity = {
+        "canonical_official_source_url": normalized_url,
+        "source_hash": normalized_hash,
+    }
+
+    return _build_identity_uuid(SOURCE_NAMESPACE, identity)
+
+
+# ============================================================
+# Canonical Registry V2：ArticleSource 身份
+# ============================================================
+
+def build_article_source_id(
+    article_id: str,
+    source_id: str,
+) -> str:
+    """根据 Article ID 和 Source ID 生成稳定 ArticleSource ID。"""
+
+    normalized_article_id = _validate_identity_uuid(
+        article_id,
+        "article_id",
+    )
+
+    normalized_source_id = _validate_identity_uuid(
+        source_id,
+        "source_id",
+    )
+
+    identity = {
+        "article_id": normalized_article_id,
+        "source_id": normalized_source_id,
+    }
+
+    return _build_identity_uuid(
+        ARTICLE_SOURCE_NAMESPACE,
+        identity,
     )

@@ -3,9 +3,19 @@ import pytest
 
 from src.legal_identity import (
     ARTICLE_NAMESPACE,
+    LAW_NAMESPACE,
+    VERSION_NAMESPACE,
+    SOURCE_NAMESPACE,
+    ARTICLE_SOURCE_NAMESPACE,
     InvalidArticleNumberError,
     normalize_article_number,
     build_article_id,
+    build_law_id,
+    build_version_id,
+    normalize_official_source_url,
+    build_source_id,
+    build_article_source_id,
+    _build_identity_uuid,
 )
 
 
@@ -190,3 +200,628 @@ def test_article_namespace_is_fixed_uuid():
 def test_invalid_version_id_raises_error(version_id):
     with pytest.raises(ValueError):
         build_article_id(version_id, "第十四条")
+
+
+# ============================================================
+# 8. Canonical Registry V2：固定 Namespace
+# ============================================================
+
+def test_v2_identity_namespaces_are_fixed():
+    assert str(LAW_NAMESPACE) == (
+        "0e6d1b4a-72c8-5f31-9a40-2b7e6d8c1f53"
+    )
+
+    assert str(VERSION_NAMESPACE) == (
+        "1f7c2a90-8b43-5d61-ae20-3c9f7b5d1a64"
+    )
+
+    assert str(SOURCE_NAMESPACE) == (
+        "2a8e3c51-9d74-5f20-b136-4e0a8c6d2f75"
+    )
+
+    assert str(ARTICLE_SOURCE_NAMESPACE) == (
+        "3b9f4d62-ae85-5c31-c247-5f1b9d7e3a86"
+    )
+
+    assert ARTICLE_NAMESPACE != LAW_NAMESPACE
+    assert ARTICLE_NAMESPACE != VERSION_NAMESPACE
+    assert ARTICLE_NAMESPACE != SOURCE_NAMESPACE
+    assert ARTICLE_NAMESPACE != ARTICLE_SOURCE_NAMESPACE
+
+
+# ============================================================
+# 9. Canonical Registry V2：规范 JSON
+# ============================================================
+
+def test_identity_json_key_order_does_not_change_uuid():
+    first = {
+        "jurisdiction": "CN",
+        "canonical_law_name": "中华人民共和国劳动合同法",
+    }
+
+    second = {
+        "canonical_law_name": "中华人民共和国劳动合同法",
+        "jurisdiction": "CN",
+    }
+
+    assert _build_identity_uuid(
+        LAW_NAMESPACE,
+        first,
+    ) == _build_identity_uuid(
+        LAW_NAMESPACE,
+        second,
+    )
+
+
+def test_identity_json_is_unicode_preserving():
+    identity = {
+        "name": "中华人民共和国劳动合同法",
+    }
+
+    result = _build_identity_uuid(
+        LAW_NAMESPACE,
+        identity,
+    )
+
+    assert result == (
+        "4fffbdd2-3149-5003-a75b-cf3701cec420"
+    )
+
+
+# ============================================================
+# 10. Canonical Registry V2：Law ID
+# ============================================================
+
+def test_v2_law_id_is_deterministic():
+    first = build_law_id(
+        "CN",
+        "中华人民共和国劳动合同法",
+    )
+
+    second = build_law_id(
+        "CN",
+        "中华人民共和国劳动合同法",
+    )
+
+    assert first == second
+    assert uuid.UUID(first).version == 5
+
+
+def test_v2_law_id_has_fixed_regression_value():
+    result = build_law_id(
+        "CN",
+        "中华人民共和国劳动合同法",
+    )
+
+    assert result == "6669a5a0-a176-554d-bf34-3eda799c6309"
+
+
+def test_v2_law_name_nfkc_and_whitespace_normalization():
+    first = build_law_id(
+        "CN",
+        "中华人民共和国劳动合同法",
+    )
+
+    second = build_law_id(
+        "CN",
+        "  中华人民共和国劳动合同法  ",
+    )
+
+    third = build_law_id(
+        "CN",
+        "中华人民共和国劳动合同法",
+    )
+
+    assert first == second == third
+
+
+def test_v2_jurisdiction_fullwidth_characters_are_normalized():
+    first = build_law_id(
+        "CN",
+        "劳动合同法",
+    )
+
+    second = build_law_id(
+        "ＣＮ",
+        "劳动合同法",
+    )
+
+    assert first == second
+
+
+def test_v2_law_name_fullwidth_characters_are_normalized():
+    first = build_law_id(
+        "CN",
+        "劳动合同法（2025年）",
+    )
+
+    second = build_law_id(
+        "CN",
+        "劳动合同法(2025年)",
+    )
+
+    assert first == second
+
+
+def test_v2_law_id_differs_by_jurisdiction():
+    first = build_law_id(
+        "CN",
+        "劳动合同法",
+    )
+
+    second = build_law_id(
+        "HK",
+        "劳动合同法",
+    )
+
+    assert first != second
+
+
+def test_v2_law_id_differs_by_law_name():
+    first = build_law_id(
+        "CN",
+        "劳动合同法",
+    )
+
+    second = build_law_id(
+        "CN",
+        "劳动法",
+    )
+
+    assert first != second
+
+
+@pytest.mark.parametrize(
+    "jurisdiction, law_name",
+    [
+        ("", "劳动合同法"),
+        (" ", "劳动合同法"),
+        ("CN", ""),
+        ("CN", "   "),
+        (None, "劳动合同法"),
+        ("CN", None),
+        (123, "劳动合同法"),
+        ("CN", 123),
+    ],
+)
+def test_v2_law_id_rejects_invalid_inputs(jurisdiction, law_name):
+    with pytest.raises(ValueError):
+        build_law_id(jurisdiction, law_name)
+
+
+# ============================================================
+# 11. Canonical Registry V2：Version ID
+# ============================================================
+
+LAW_ID_A = "6669a5a0-a176-554d-bf34-3eda799c6309"
+LAW_ID_B = "77777777-7777-4777-8777-777777777777"
+
+
+def test_v2_version_id_is_deterministic():
+    first = build_version_id(
+        LAW_ID_A,
+        "2025-01-01",
+    )
+
+    second = build_version_id(
+        LAW_ID_A,
+        "2025-01-01",
+    )
+
+    assert first == second
+    assert uuid.UUID(first).version == 5
+
+
+def test_v2_version_id_has_fixed_regression_value():
+    result = build_version_id(
+        LAW_ID_A,
+        "2025-01-01",
+    )
+
+    assert result == "0c8c8ef2-697b-5b62-81c2-be18d3a59d3b"
+
+
+def test_v2_version_id_differs_by_law():
+    first = build_version_id(
+        LAW_ID_A,
+        "2025-01-01",
+    )
+
+    second = build_version_id(
+        LAW_ID_B,
+        "2025-01-01",
+    )
+
+    assert first != second
+
+
+def test_v2_version_id_differs_by_version_key():
+    first = build_version_id(
+        LAW_ID_A,
+        "2025-01-01",
+    )
+
+    second = build_version_id(
+        LAW_ID_A,
+        "2026-01-01",
+    )
+
+    assert first != second
+
+
+def test_v2_version_id_normalizes_uuid_format():
+    first = build_version_id(
+        LAW_ID_A,
+        "2025-01-01",
+    )
+
+    second = build_version_id(
+        LAW_ID_A.upper(),
+        "2025-01-01",
+    )
+
+    assert first == second
+
+
+@pytest.mark.parametrize(
+    "law_id, version_key",
+    [
+        ("invalid", "2025-01-01"),
+        ("", "2025-01-01"),
+        (None, "2025-01-01"),
+        (LAW_ID_A, ""),
+        (LAW_ID_A, "   "),
+        (LAW_ID_A, None),
+        (LAW_ID_A, 123),
+    ],
+)
+def test_v2_version_id_rejects_invalid_inputs(law_id, version_key):
+    with pytest.raises(ValueError):
+        build_version_id(law_id, version_key)
+
+
+# ============================================================
+# 12. Canonical Registry V2：官方来源 URL
+# ============================================================
+
+def test_source_url_normalizes_scheme_and_hostname():
+    result = normalize_official_source_url(
+        "HTTPS://FLK.NPC.GOV.CN/law"
+    )
+
+    assert result == "https://flk.npc.gov.cn/law"
+
+
+def test_source_url_removes_default_https_port():
+    result = normalize_official_source_url(
+        "https://flk.npc.gov.cn:443/law"
+    )
+
+    assert result == "https://flk.npc.gov.cn/law"
+
+
+def test_source_url_removes_default_http_port():
+    result = normalize_official_source_url(
+        "http://example.com:80/law"
+    )
+
+    assert result == "http://example.com/law"
+
+
+def test_source_url_preserves_non_default_port():
+    result = normalize_official_source_url(
+        "https://example.com:8443/law"
+    )
+
+    assert result == "https://example.com:8443/law"
+
+
+def test_source_url_removes_fragment():
+    result = normalize_official_source_url(
+        "https://example.com/law#section-1"
+    )
+
+    assert result == "https://example.com/law"
+
+
+def test_source_url_preserves_path_exactly():
+    source_url = (
+        "https://example.com/Legal%20Files/"
+        "Law%2FVersion.DOCX"
+    )
+
+    assert normalize_official_source_url(source_url) == source_url
+
+
+def test_source_url_preserves_query_parameter_order():
+    first = normalize_official_source_url(
+        "https://example.com/law?a=1&b=2"
+    )
+
+    second = normalize_official_source_url(
+        "https://example.com/law?b=2&a=1"
+    )
+
+    assert first == "https://example.com/law?a=1&b=2"
+    assert second == "https://example.com/law?b=2&a=1"
+    assert first != second
+
+
+def test_source_url_preserves_ipv6_host():
+    result = normalize_official_source_url(
+        "https://[2001:DB8::1]:443/law"
+    )
+
+    assert result == "https://[2001:db8::1]/law"
+
+
+@pytest.mark.parametrize(
+    "source_url",
+    [
+        "",
+        " ",
+        "ftp://example.com/law",
+        "file:///tmp/law.docx",
+        "https:///law",
+        "https://",
+        "https://user@example.com/law",
+        "https://user:password@example.com/law",
+        "https://example.com:abc/law",
+        "https://example.com:99999/law",
+        "https://example.com:/law",
+        "https://example.com/law with spaces",
+        "https://example.com/law\n",
+        None,
+        123,
+    ],
+)
+def test_source_url_rejects_invalid_urls(source_url):
+    with pytest.raises(ValueError):
+        normalize_official_source_url(source_url)
+
+
+def test_source_url_strips_leading_and_trailing_whitespace():
+    result = normalize_official_source_url(
+        "  HTTPS://EXAMPLE.COM/law  "
+    )
+
+    assert result == "https://example.com/law"
+
+
+# ============================================================
+# 13. Canonical Registry V2：Source ID
+# ============================================================
+
+SOURCE_HASH_A = "a" * 64
+SOURCE_URL_A = (
+    "https://flk.npc.gov.cn/detail.html"
+    "?lawId=1&query=a"
+)
+
+
+def test_v2_source_id_is_deterministic():
+    first = build_source_id(
+        SOURCE_URL_A,
+        SOURCE_HASH_A,
+    )
+
+    second = build_source_id(
+        SOURCE_URL_A,
+        SOURCE_HASH_A,
+    )
+
+    assert first == second
+    assert uuid.UUID(first).version == 5
+
+
+def test_v2_source_id_has_fixed_regression_value():
+    result = build_source_id(
+        SOURCE_URL_A,
+        SOURCE_HASH_A,
+    )
+
+    assert result == "3620eb58-efe5-5bb9-838c-2c0ad3140d38"
+
+
+def test_v2_source_id_normalizes_url_before_generation():
+    first = build_source_id(
+        "HTTPS://FLK.NPC.GOV.CN:443/detail.html?lawId=1#top",
+        SOURCE_HASH_A,
+    )
+
+    second = build_source_id(
+        "https://flk.npc.gov.cn/detail.html?lawId=1",
+        SOURCE_HASH_A,
+    )
+
+    assert first == second
+
+
+def test_v2_source_id_normalizes_sha256_case():
+    first = build_source_id(
+        SOURCE_URL_A,
+        "A" * 64,
+    )
+
+    second = build_source_id(
+        SOURCE_URL_A,
+        "a" * 64,
+    )
+
+    assert first == second
+
+
+def test_v2_source_id_differs_by_raw_file_hash():
+    first = build_source_id(
+        SOURCE_URL_A,
+        "a" * 64,
+    )
+
+    second = build_source_id(
+        SOURCE_URL_A,
+        "b" * 64,
+    )
+
+    assert first != second
+
+
+def test_v2_source_id_differs_by_query_order():
+    first = build_source_id(
+        "https://example.com/law?a=1&b=2",
+        SOURCE_HASH_A,
+    )
+
+    second = build_source_id(
+        "https://example.com/law?b=2&a=1",
+        SOURCE_HASH_A,
+    )
+
+    assert first != second
+
+
+@pytest.mark.parametrize(
+    "source_hash",
+    [
+        "",
+        "a" * 63,
+        "a" * 65,
+        "g" * 64,
+        "a" * 63 + " ",
+        None,
+        123,
+    ],
+)
+def test_v2_source_id_rejects_invalid_sha256(source_hash):
+    with pytest.raises(ValueError):
+        build_source_id(
+            SOURCE_URL_A,
+            source_hash,
+        )
+
+
+# ============================================================
+# 14. Canonical Registry V2：ArticleSource ID
+# ============================================================
+
+ARTICLE_ID_A = "44a70e2f-489b-5128-bdf4-2904b0d2f75a"
+ARTICLE_ID_B = "55555555-5555-4555-8555-555555555555"
+
+SOURCE_ID_A = "3620eb58-efe5-5bb9-838c-2c0ad3140d38"
+SOURCE_ID_B = "66666666-6666-4666-8666-666666666666"
+
+
+def test_v2_article_source_id_is_deterministic():
+    first = build_article_source_id(
+        ARTICLE_ID_A,
+        SOURCE_ID_A,
+    )
+
+    second = build_article_source_id(
+        ARTICLE_ID_A,
+        SOURCE_ID_A,
+    )
+
+    assert first == second
+    assert uuid.UUID(first).version == 5
+
+
+def test_v2_article_source_id_has_fixed_regression_value():
+    result = build_article_source_id(
+        ARTICLE_ID_A,
+        SOURCE_ID_A,
+    )
+
+    assert result == "cc411d7b-eb48-5015-84fa-e16849124191"
+
+
+def test_v2_article_source_id_differs_by_article():
+    first = build_article_source_id(
+        ARTICLE_ID_A,
+        SOURCE_ID_A,
+    )
+
+    second = build_article_source_id(
+        ARTICLE_ID_B,
+        SOURCE_ID_A,
+    )
+
+    assert first != second
+
+
+def test_v2_article_source_id_differs_by_source():
+    first = build_article_source_id(
+        ARTICLE_ID_A,
+        SOURCE_ID_A,
+    )
+
+    second = build_article_source_id(
+        ARTICLE_ID_A,
+        SOURCE_ID_B,
+    )
+
+    assert first != second
+
+
+@pytest.mark.parametrize(
+    "article_id, source_id",
+    [
+        ("invalid", SOURCE_ID_A),
+        ("", SOURCE_ID_A),
+        (None, SOURCE_ID_A),
+        (ARTICLE_ID_A, "invalid"),
+        (ARTICLE_ID_A, ""),
+        (ARTICLE_ID_A, None),
+    ],
+)
+def test_v2_article_source_id_rejects_invalid_inputs(
+    article_id,
+    source_id,
+):
+    with pytest.raises(ValueError):
+        build_article_source_id(
+            article_id,
+            source_id,
+        )
+
+
+# ============================================================
+# 15. 原 Article ID 固定身份回归
+# ============================================================
+
+def test_existing_article_id_fixed_regression_value():
+    result = build_article_id(
+        VERSION_A,
+        "第十四条",
+    )
+
+    assert result == "44a70e2f-489b-5128-bdf4-2904b0d2f75a"
+
+    assert str(ARTICLE_NAMESPACE) == (
+        "b6d7e8f1-2a3c-4d5e-8f90-1a2b3c4d5e6f"
+    )
+
+
+# ============================================================
+# 16. Canonical Registry V2：URL 边界测试
+# ============================================================
+
+def test_source_url_preserves_ipv6_non_default_port():
+    result = normalize_official_source_url(
+        "https://[2001:DB8::1]:8443/law"
+    )
+
+    assert result == "https://[2001:db8::1]:8443/law"
+
+
+def test_source_url_preserves_encoded_path_and_query_order():
+    source_url = (
+        "HTTPS://EXAMPLE.COM/Legal%20Files/"
+        "Law%2FVersion.DOCX?b=2&a=1"
+    )
+
+    result = normalize_official_source_url(source_url)
+
+    assert result == (
+        "https://example.com/Legal%20Files/"
+        "Law%2FVersion.DOCX?b=2&a=1"
+    )
