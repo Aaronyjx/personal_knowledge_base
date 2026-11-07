@@ -846,15 +846,17 @@ URL 规范化先执行 strip，导致末尾换行符被删除，
 
 ### 当前尚未完成
 
-- Identity 阶段 GitHub commit/push：尚未执行。
+
 - 正式阶段 2 的 Models、Store、Builder 工作：尚未开始。
 
 ### 当前 Git 交付状态
 
 - 审计基准 HEAD：`f709dc7ef79f18c59ab98ee54a0fda41bb83b5ec`
 - 当前分支：`main`
-- `HEAD` 与 `origin/main`：完全同步，差异为 `0 0`。
-- Identity 待交付文件：
+- Identity 实现提交：`964b030fa335857504d304c28a956136a264fba4`。
+- GitHub push：待完成。
+- 精确版本审计时，HEAD 与 origin/main 完全同步；当前 Identity 提交等待推送。
+- Identity 本次已提交文件：
   - `src/legal_identity.py`
   - `tests/test_legal_identity.py`
   - `docs/legal_registry_v2_roadmap.md`
@@ -916,3 +918,12 @@ Identity 是其前置身份工作块，不代表正式阶段 2 已完成。**
 Identity 代码差异、测试差异、身份协议、固定 UUID 和 Git 版本身份均已审查通过。
 
 本次审计不代表 GitHub 提交已经完成。提交前仍须核对 staged diff，并排除 `reports/` 未跟踪备份目录。
+
+
+### Identity GitHub 交付记录（2026-11-07）
+
+- Identity 实现提交：`964b030fa335857504d304c28a956136a264fba4`
+- 提交内容：`src/legal_identity.py`、`tests/test_legal_identity.py`、Roadmap。
+- `reports/` 未跟踪备份目录未纳入提交。
+- Roadmap 本次交付状态更新由独立文档提交记录。
+- GitHub push 结果将在本次终端执行结束后核验。
